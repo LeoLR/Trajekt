@@ -95,19 +95,23 @@ export function normalizeAll(input: unknown): Trajectory[] {
 }
 
 function normalizeOtlpGrouped(v: any): Trajectory[] {
-  const allSpans: any[] = (v.resourceSpans ?? [])
-    .flatMap((rs: any) => rs.scopeSpans ?? [])
-    .flatMap((ss: any) => ss.spans ?? []);
-
+  // On aplatit en gardant pour chaque span les attributs de sa
+  // ressource (service.name, service.version...) : c'est là que vit
+  // l'identité de l'agent, et un même envoi peut mélanger plusieurs
+  // services.
   const groups = new Map<string, any[]>();
-  for (const span of allSpans) {
-    const key = span.traceId ?? 'unknown';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(span);
+  for (const rs of v.resourceSpans ?? []) {
+    for (const ss of rs.scopeSpans ?? []) {
+      for (const span of ss.spans ?? []) {
+        const key = span.traceId ?? 'unknown';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push({ resource: rs.resource, span });
+      }
+    }
   }
 
-  return Array.from(groups.values()).map((spans) => {
-    const trajectory = otlpNormalizer.normalize({ resourceSpans: [{ scopeSpans: [{ spans }] }] });
+  return Array.from(groups.values()).map((entries) => {
+    const trajectory = otlpFromEntries(entries);
     trajectory.metadata.sourceFormat = 'otlp';
     return trajectory;
   });
@@ -142,9 +146,16 @@ const langfuseNormalizer: Normalizer = {
         new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
     );
     const steps: TrajectoryStep[] = [];
+    let promptVersion: string | undefined;
     for (const o of obs) {
+      // Langfuse distingue le niveau (DEBUG..ERROR) du message de statut :
+      // un statusMessage seul peut être informatif, ce n'est pas une erreur.
+      const error =
+        o.level === 'ERROR' ? (o.statusMessage ?? 'error') : undefined;
       const base = {
         index: steps.length,
+        id: o.id ?? undefined,
+        parentId: o.parentObservationId ?? undefined,
         timestamp: o.startTime,
         durationMs: o.endTime
           ? new Date(o.endTime).getTime() - new Date(o.startTime).getTime()
@@ -152,6 +163,9 @@ const langfuseNormalizer: Normalizer = {
         raw: o,
       };
       if (o.type === 'GENERATION') {
+        if (promptVersion === undefined && o.promptVersion != null) {
+          promptVersion = String(o.promptVersion);
+        }
         steps.push({
           ...base,
           type: 'llm_call',
@@ -166,27 +180,35 @@ const langfuseNormalizer: Normalizer = {
               }
             : undefined,
           costUsd: o.calculatedTotalCost ?? undefined,
-          error: o.statusMessage ?? undefined,
+          error,
         });
-      } else if (o.type === 'SPAN' && looksLikeToolSpan(o)) {
+      } else if (o.type === 'TOOL' || (o.type === 'SPAN' && looksLikeToolSpan(o))) {
         steps.push({
           ...base,
           type: 'tool_call',
           name: o.name,
           args: o.input,
           result: o.output,
-          error: o.statusMessage ?? undefined,
+          error,
         });
       } else {
-        steps.push({ ...base, type: 'custom', kind: o.type, data: o });
+        steps.push({ ...base, type: 'custom', kind: o.type, data: o, error });
       }
     }
+    const meta = isObj(trace.metadata) ? (trace.metadata as Record<string, unknown>) : {};
     return {
       schemaVersion: SCHEMA_VERSION,
       id: trace.id ?? cryptoRandomId(),
       source: 'live',
       steps,
-      metadata: { name: trace.name },
+      metadata: {
+        name: trace.name,
+        traceId: trace.id ?? undefined,
+        agentName: str(meta.agentName) ?? trace.name ?? undefined,
+        agentVersion: str(meta.agentVersion) ?? trace.release ?? trace.version ?? undefined,
+        promptVersion: str(meta.promptVersion) ?? promptVersion,
+        environment: trace.environment ?? undefined,
+      },
       createdAt: trace.timestamp,
     };
   },
@@ -196,55 +218,135 @@ const otlpNormalizer: Normalizer = {
   format: 'otlp',
   detect: (v) => isObj(v) && Array.isArray((v as any).resourceSpans),
   normalize: (v) => {
-    const spans: any[] = (v as any).resourceSpans
-      .flatMap((rs: any) => rs.scopeSpans ?? [])
-      .flatMap((ss: any) => ss.spans ?? [])
-      .sort((a: any, b: any) => Number(a.startTimeUnixNano) - Number(b.startTimeUnixNano));
-
-    const steps: TrajectoryStep[] = spans.map((span, index) => {
-      const attrs = attrMap(span.attributes);
-      const base = {
-        index,
-        timestamp: nanoToIso(span.startTimeUnixNano),
-        durationMs:
-          (Number(span.endTimeUnixNano) - Number(span.startTimeUnixNano)) / 1e6,
-        raw: span,
-      };
-      // Conventions sémantiques GenAI d'OpenTelemetry (gen_ai.*),
-      // utilisées par Mastra, le Vercel AI SDK, LangGraph...
-      if (attrs['gen_ai.operation.name'] === 'chat' || attrs['gen_ai.request.model']) {
-        return {
-          ...base,
-          type: 'llm_call' as const,
-          model: str(attrs['gen_ai.request.model'] ?? attrs['gen_ai.response.model']),
-          input: [],
-          usage: {
-            inputTokens: num(attrs['gen_ai.usage.input_tokens']),
-            outputTokens: num(attrs['gen_ai.usage.output_tokens']),
-          },
-        };
+    const entries: OtlpEntry[] = [];
+    for (const rs of (v as any).resourceSpans) {
+      for (const ss of rs.scopeSpans ?? []) {
+        for (const span of ss.spans ?? []) entries.push({ resource: rs.resource, span });
       }
-      if (attrs['gen_ai.tool.name'] || attrs['ai.toolCall.name']) {
-        return {
-          ...base,
-          type: 'tool_call' as const,
-          name: str(attrs['gen_ai.tool.name'] ?? attrs['ai.toolCall.name']) ?? span.name,
-          args: attrs['ai.toolCall.args'],
-          result: attrs['ai.toolCall.result'],
-        };
-      }
-      return { ...base, type: 'custom' as const, kind: span.name, data: attrs };
-    });
-
-    return {
-      schemaVersion: SCHEMA_VERSION,
-      id: spans[0]?.traceId ?? cryptoRandomId(),
-      source: 'live',
-      steps,
-      metadata: {},
-    };
+    }
+    return otlpFromEntries(entries);
   },
 };
+
+interface OtlpEntry {
+  resource?: { attributes?: any[] };
+  span: any;
+}
+
+/** Opérations GenAI (semconv OTel) qui correspondent à un appel de modèle. */
+const LLM_OPERATIONS = new Set(['chat', 'text_completion', 'generate_content', 'completion']);
+
+function otlpFromEntries(entries: OtlpEntry[]): Trajectory {
+  const sorted = [...entries].sort(
+    (a, b) => Number(a.span.startTimeUnixNano) - Number(b.span.startTimeUnixNano),
+  );
+
+  const spanAttrs = sorted.map((e) => attrMap(e.span.attributes));
+  const resourceAttrs = sorted.map((e) => attrMap(e.resource?.attributes));
+
+  const steps: TrajectoryStep[] = sorted.map(({ span }, index) => {
+    const attrs = spanAttrs[index];
+    const base = {
+      index,
+      id: span.spanId || undefined,
+      parentId: span.parentSpanId || undefined,
+      timestamp: nanoToIso(span.startTimeUnixNano),
+      durationMs: durationMs(span),
+      raw: span,
+    };
+    const error = spanError(span);
+    const op = str(attrs['gen_ai.operation.name']);
+
+    const isLlm =
+      (op !== undefined && LLM_OPERATIONS.has(op)) ||
+      attrs['gen_ai.request.model'] !== undefined ||
+      // Vercel AI SDK : seuls les spans *.doGenerate / *.doStream sont
+      // de vrais appels au fournisseur ; le span parent les englobe.
+      (attrs['ai.model.id'] !== undefined && /\.do(Generate|Stream)$/.test(span.name ?? ''));
+    const toolName = str(
+      attrs['gen_ai.tool.name'] ?? attrs['ai.toolCall.name'] ??
+        (op === 'execute_tool' ? span.name : undefined),
+    );
+
+    if (toolName !== undefined) {
+      return {
+        ...base,
+        type: 'tool_call' as const,
+        name: toolName,
+        args: maybeJson(attrs['gen_ai.tool.call.arguments'] ?? attrs['ai.toolCall.args']),
+        result: maybeJson(attrs['gen_ai.tool.call.result'] ?? attrs['ai.toolCall.result']),
+        error,
+      };
+    }
+    if (isLlm) {
+      const inputTokens = num(
+        attrs['gen_ai.usage.input_tokens'] ?? attrs['gen_ai.usage.prompt_tokens'] ??
+          attrs['ai.usage.promptTokens'] ?? attrs['ai.usage.inputTokens'],
+      );
+      const outputTokens = num(
+        attrs['gen_ai.usage.output_tokens'] ?? attrs['gen_ai.usage.completion_tokens'] ??
+          attrs['ai.usage.completionTokens'] ?? attrs['ai.usage.outputTokens'],
+      );
+      const text = str(attrs['ai.response.text']);
+      return {
+        ...base,
+        type: 'llm_call' as const,
+        model: str(
+          attrs['gen_ai.response.model'] ?? attrs['gen_ai.request.model'] ?? attrs['ai.model.id'],
+        ),
+        input: [],
+        output: text ? { role: 'assistant' as const, content: text.slice(0, 4000) } : undefined,
+        usage:
+          inputTokens !== undefined || outputTokens !== undefined
+            ? { inputTokens, outputTokens }
+            : undefined,
+        costUsd: num(attrs['gen_ai.usage.cost'] ?? attrs['trajekt.cost_usd']),
+        error,
+      };
+    }
+    return { ...base, type: 'custom' as const, kind: span.name, data: attrs, error };
+  });
+
+  // Identité : le span racine d'abord, puis n'importe quel span, puis la
+  // ressource. Les clés trajekt.* permettent de forcer une valeur.
+  const rootIdx = sorted.findIndex((e) => !e.span.parentSpanId);
+  const ordered = rootIdx >= 0
+    ? [spanAttrs[rootIdx], ...spanAttrs.filter((_, i) => i !== rootIdx)]
+    : spanAttrs;
+  const pick = (keys: string[], fromResource: string[] = []) => {
+    for (const k of keys) {
+      for (const a of ordered) if (a[k] !== undefined && a[k] !== '') return str(a[k]);
+    }
+    for (const k of fromResource) {
+      for (const a of resourceAttrs) if (a[k] !== undefined && a[k] !== '') return str(a[k]);
+    }
+    return undefined;
+  };
+  let serviceName = pick([], ['service.name']);
+  if (serviceName?.startsWith('unknown_service')) serviceName = undefined;
+
+  const traceId: string | undefined = sorted[0]?.span.traceId || undefined;
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    id: traceId ?? cryptoRandomId(),
+    source: 'live',
+    steps,
+    metadata: {
+      traceId,
+      agentName:
+        pick(['trajekt.agent.name', 'gen_ai.agent.name', 'ai.telemetry.functionId']) ?? serviceName,
+      agentVersion: pick(
+        ['trajekt.agent.version', 'gen_ai.agent.version', 'ai.telemetry.metadata.agentVersion'],
+        ['service.version'],
+      ),
+      promptVersion: pick(['trajekt.prompt.version', 'ai.telemetry.metadata.promptVersion']),
+      environment: pick(
+        ['trajekt.environment'],
+        ['deployment.environment.name', 'deployment.environment'],
+      ),
+    },
+  };
+}
 
 const aiSdkNormalizer: Normalizer = {
   format: 'ai-sdk',
@@ -331,7 +433,7 @@ function looksLikeToolSpan(o: any): boolean {
 
 function attrMap(attributes: any[] = []): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const a of attributes) {
+  for (const a of attributes ?? []) {
     out[a.key] =
       a.value?.stringValue ??
       a.value?.intValue ??
@@ -344,12 +446,49 @@ function attrMap(attributes: any[] = []): Record<string, unknown> {
 
 const str = (v: unknown): string | undefined =>
   typeof v === 'string' ? v : v == null ? undefined : String(v);
-const num = (v: unknown): number | undefined =>
-  v == null ? undefined : Number(v);
+const num = (v: unknown): number | undefined => {
+  if (v == null || v === '') return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+};
+
+function durationMs(span: any): number | undefined {
+  const start = Number(span.startTimeUnixNano);
+  const end = Number(span.endTimeUnixNano);
+  return Number.isFinite(start) && Number.isFinite(end) && end >= start
+    ? (end - start) / 1e6
+    : undefined;
+}
+
+/**
+ * Un span est en erreur si son statut vaut ERROR (code 2, ou la forme
+ * texte de certains exporters), ou s'il porte un événement "exception"
+ * (recordException sans setStatus, oubli fréquent).
+ */
+function spanError(span: any): string | undefined {
+  const code = span.status?.code;
+  const isError = code === 2 || code === 'STATUS_CODE_ERROR' || code === 'ERROR';
+  const exception = (span.events ?? []).find((e: any) => e?.name === 'exception');
+  if (!isError && !exception) return undefined;
+  const excMsg = exception ? str(attrMap(exception.attributes)['exception.message']) : undefined;
+  return str(span.status?.message) || excMsg || 'error';
+}
+
+function maybeJson(v: unknown): unknown {
+  if (typeof v !== 'string') return v;
+  const t = v.trim();
+  if (!(t.startsWith('{') || t.startsWith('['))) return v;
+  try {
+    return JSON.parse(t);
+  } catch {
+    return v;
+  }
+}
 
 function nanoToIso(nano: unknown): string | undefined {
+  if (nano == null || nano === '') return undefined;
   const n = Number(nano);
-  return Number.isFinite(n) ? new Date(n / 1e6).toISOString() : undefined;
+  return Number.isFinite(n) && n > 0 ? new Date(n / 1e6).toISOString() : undefined;
 }
 
 function describeShape(v: unknown): string {

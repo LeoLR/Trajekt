@@ -1,17 +1,28 @@
 {
   "name": "@trajekt/core",
   "version": "0.1.0",
-  "description": "Trajectory testing for AI agents — normalized trajectory model, universal trace normalization, provider & adapter contracts.",
+  "description": "Modèle de trajectoire normalisé pour agents IA : normalisation universelle (Langfuse, OTLP, AI SDK), métriques par run, détection de régression.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
-    "test": "node --test dist/test"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
   },
   "license": "MIT",
   "devDependencies": {
-    "typescript": "^5.5.0"
+    "typescript": "^5.9.0",
+    "tsx": "^4.20.0",
+    "@types/node": "^22.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   }
 }

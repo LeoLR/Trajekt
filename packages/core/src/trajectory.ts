@@ -48,6 +48,14 @@ export type TrajectoryStep =
 export interface BaseStep {
   /** Position dans la trajectoire (0-indexé, ordre chronologique). */
   index: number;
+  /**
+   * Identifiant stable du step dans sa source (spanId OTel, id
+   * d'observation Langfuse). Sert à fusionner sans doublon les lots
+   * d'une même trace qui arrivent en plusieurs envois.
+   */
+  id?: string;
+  /** Identifiant du step parent si la source fournit un arbre. */
+  parentId?: string;
   /** Horodatage ISO 8601 si connu. */
   timestamp?: string;
   /** Durée du step en millisecondes si connue. */
@@ -97,10 +105,26 @@ export interface CustomStep extends BaseStep {
   type: 'custom';
   kind: string;
   data?: unknown;
+  error?: string;
 }
 
+export type RunStatus = 'ok' | 'error';
+
 export interface TrajectoryMetadata {
+  /**
+   * Identifiant de trace de la source (traceId OTel, id Langfuse).
+   * Clé de fusion à l'ingestion : deux envois du même traceId = un run.
+   */
+  traceId?: string;
+  /** Nom de l'agent — l'axe principal de suivi dans le temps. */
+  agentName?: string;
   agentVersion?: string;
+  environment?: string;
+  /**
+   * Issue du run quand la source la donne explicitement (statut du span
+   * racine OTel, niveau ERROR Langfuse). Sinon déduite par computeMetrics.
+   */
+  status?: RunStatus;
   promptVersion?: string;
   scenario?: { name: string; persona?: string };
   totalCostUsd?: number;

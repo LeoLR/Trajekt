@@ -13,6 +13,7 @@ export {
   type TrajectoryStep,
   type TrajectorySource,
   type TrajectoryMetadata,
+  type RunStatus,
   type LlmCallStep,
   type ToolCallStep,
   type UserMessageStep,
@@ -48,3 +49,37 @@ export {
   type AgentTurnResult,
   type ConversationContext,
 } from './provider.js';
+
+export { mergeTrajectories, sortAndReindex } from './merge.js';
+
+export {
+  computeMetrics,
+  stableStringify,
+  NO_TOOL_PATH,
+  type RunMetrics,
+} from './metrics.js';
+
+export {
+  DEFAULT_PRICING,
+  setPricing,
+  getPricing,
+  priceFor,
+  estimateCostUsd,
+  type ModelPrice,
+} from './pricing.js';
+
+export {
+  compareWindows,
+  regressionsOnly,
+  normalCdf,
+  proportionIncreasePValue,
+  meanIncreasePValue,
+  METRIC_LABELS,
+  type MetricKey,
+  type Moments,
+  type WindowStats,
+  type Comparison,
+  type CompareOptions,
+  type Verdict,
+  type Severity,
+} from './regression.js';

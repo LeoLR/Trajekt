@@ -3,7 +3,10 @@
   "private": true,
   "scripts": {
     "build": "pnpm -r build",
-    "dev": "pnpm --filter dashboard dev"
+    "dev": "pnpm --filter dashboard dev",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "seed": "pnpm --filter dashboard seed"
   },
-  "packageManager": "pnpm@9.0.0"
+  "packageManager": "pnpm@10.28.0"
 }
