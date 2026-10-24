@@ -1,89 +1,44 @@
-# trajekt / dashboard (phase 1 — API seule)
+# Trajekt dashboard
 
-Ingestion + stockage + lecture, conformes à `api-contract.md`. Le
-dashboard visuel (liste des runs + le visualiseur) arrive en phase 2 —
-pour l'instant `/` est un simple placeholder.
+Next.js app: ingestion (`POST /v1/traces`), the read API and the dashboard. One Postgres, nothing else.
 
-## Setup
+## Run it
 
 ```bash
-# Depuis la racine du monorepo
-pnpm install
-
-cp apps/dashboard/.env.example apps/dashboard/.env
-# Remplir DATABASE_URL (Neon, ou docker run -e POSTGRES_PASSWORD=... -p 5432:5432 postgres:16)
-# Remplir DASHBOARD_SESSION_SECRET avec une chaîne aléatoire longue
-
-cd apps/dashboard
-pnpm db:generate   # génère la migration SQL depuis src/db/schema.ts
-pnpm db:migrate    # l'applique sur DATABASE_URL
-
-pnpm create-project "sentry-jira-agent"
-# → affiche une clé tk_live_... à copier, elle ne sera plus montrée
+cp .env.example .env            # DATABASE_URL, DASHBOARD_PASSWORD, DASHBOARD_SESSION_SECRET
+pnpm migrate
+pnpm create-project my-project  # prints the API key once
+pnpm seed                       # optional: two weeks of simulated runs
+pnpm dev                        # http://localhost:3000
 ```
 
-## Lancer
+## Pages
+
+| Path | What it answers |
+|---|---|
+| `/` | Which agents are regressing? One card per agent: last 24 h, 14-day trend, regressions found. |
+| `/agents/:name` | Is it getting worse, and since when? Latest version vs previous (or last 24 h vs previous 7 days), daily trends with deploys marked, tool paths per version, versions, recent runs. |
+| `/runs` | Runs filtered by agent, version, status, or "repeated tool calls only". |
+| `/runs/:id` | The run on a timeline, with repeats, retries and failures flagged, and the detail of each step. |
+| `/runs/:id/compare` | Two runs aligned step by step, and what changed between them (version, prompt version, model). |
+| `/explore` | Drop a trace file and see it — parsed in the browser, nothing is uploaded. |
+
+## API
+
+See [`docs/api-contract.md`](../../docs/api-contract.md). In short:
+
+- `POST /v1/traces` — API key (`Authorization: Bearer tk_live_…`). Optional headers `X-Trajekt-Agent`, `X-Trajekt-Agent-Version`, `X-Trajekt-Prompt-Version`, `X-Trajekt-Environment` are used when the trace carries no identity.
+- `GET /api/agents`, `/api/agents/:name/timeseries`, `/versions`, `/compare?mode=version|window`
+- `GET /api/runs`, `/api/runs/:id`, `/api/alerts`, `/api/stats`
+- `POST /api/alerts/check` — `Authorization: Bearer $CRON_SECRET`, for a cron. Posts new regressions to `SLACK_WEBHOOK_URL`.
+
+## How regressions are decided
+
+For each metric (failed runs, failed tool calls, mean duration, cost, steps, tokens, repeated tool calls, runs on a new tool path), the change is flagged only if it is statistically significant (one-sided test, p < 0.01), large enough to matter (+15% on a mean, +3 points on a rate) and measured on at least 20 runs on each side. An alert is sent once per agent and metric every 24 h.
+
+## Tests and previews
 
 ```bash
-pnpm dev   # http://localhost:3000
+pnpm test        # needs a Postgres reachable with trust auth (TEST_PG_HOST / TEST_PG_PORT / TEST_PG_USER)
+pnpm preview     # renders every page with simulated data into ./preview/*.html, without Next.js
 ```
-
-## Tester l'ingestion (sans agent, juste curl)
-
-```bash
-curl -X POST http://localhost:3000/v1/traces \
-  -H "Authorization: Bearer tk_live_XXXXXXXX" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "resourceSpans": [{
-      "scopeSpans": [{
-        "spans": [{
-          "traceId": "test-001",
-          "name": "chat",
-          "startTimeUnixNano": "1752480000000000000",
-          "endTimeUnixNano": "1752480002000000000",
-          "attributes": [
-            { "key": "gen_ai.request.model", "value": { "stringValue": "claude-sonnet-4-6" } },
-            { "key": "gen_ai.usage.input_tokens", "value": { "intValue": 120 } }
-          ]
-        }]
-      }]
-    }]
-  }'
-```
-
-Réponse attendue : `201`, `{ "trajectories": [{ "id": "...", "sourceFormat": "otlp", ... }] }`.
-
-## Tester la lecture (nécessite le cookie de session)
-
-Phase 1 n'a pas de vrai login — pose le cookie à la main pour tester :
-
-```bash
-curl http://localhost:3000/api/trajectories \
-  -H "Cookie: trajekt_session=<valeur de DASHBOARD_SESSION_SECRET>"
-
-curl http://localhost:3000/api/stats?range=7d \
-  -H "Cookie: trajekt_session=<valeur de DASHBOARD_SESSION_SECRET>"
-```
-
-## Brancher un vrai agent dessus
-
-Reprendre `otel-setup.ts` (déjà écrit pour la validation sans service
-tiers) et changer uniquement l'exporter :
-
-```typescript
-new OTLPTraceExporter({
-  url: 'https://<ton-domaine>/v1/traces',      // au lieu du collector local
-  headers: { Authorization: 'Bearer tk_live_XXXXXXXX' },
-})
-```
-
-Le reste (les helpers `withLlmSpan` / `withToolSpan`, les attributs
-`gen_ai.*`) ne change pas — c'est tout l'intérêt d'avoir instrumenté en
-OTel standard dès le départ.
-
-## Ce qui manque volontairement (voir architecture-v2)
-
-Rate limiting, rétention automatique, vraie auth multi-utilisateur,
-webhooks sortants — tous repoussés tant qu'un vrai besoin ne s'est pas
-manifesté. Ne pas les ajouter par anticipation.

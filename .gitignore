@@ -5,3 +5,5 @@ dist/
 *.tsbuildinfo
 apps/dashboard/drizzle/meta/_journal.json.bak
 .pglite/
+dist-ssr/
+apps/dashboard/preview/
