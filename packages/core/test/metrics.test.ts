@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  annotateSteps,
   normalize,
   normalizeAll,
   computeMetrics,
@@ -44,7 +45,7 @@ test('boucle : même outil + mêmes arguments compté, arguments différents non
   );
   const m = computeMetrics(t);
   assert.equal(m.redundantToolCalls, 1);
-  assert.deepEqual(m.toolPath, ['gitlab.searchCode', 'gitlab.readFile', 'gitlab.searchCode']);
+  assert.deepEqual(m.toolPath, ['gitlab.searchCode', 'gitlab.readFile', 'gitlab.searchCode ×3']);
 });
 
 test('retry : un step identique juste après un échec', () => {
@@ -59,6 +60,7 @@ test('retry : un step identique juste après un échec', () => {
   );
   const m = computeMetrics(t);
   assert.equal(m.retryCount, 2);
+  assert.equal(m.redundantToolCalls, 0); // relancer après un échec n'est pas boucler
   assert.equal(m.toolErrorCount, 2);
   assert.equal(m.errorCount, 2);
   assert.equal(m.status, 'ok'); // racine saine : les erreurs ont été rattrapées
@@ -122,4 +124,37 @@ test('run sans outil', () => {
   assert.equal(m.pathSignature, NO_TOOL_PATH);
   assert.equal(m.costUsd, null);
   assert.equal(m.durationMs, undefined);
+});
+
+test('annotations : REPEAT #n, tentatives, erreurs', () => {
+  const tid = 'ann';
+  const t = normalize(otlpPayload([
+    otlpSpan(tid, { spanId: '1', name: 't', startMs: 1, endMs: 2, attrs: toolAttrs('gitlab.searchCode', { q: 'x' }) }),
+    otlpSpan(tid, { spanId: '2', name: 't', startMs: 3, endMs: 4, attrs: toolAttrs('jira.createIssue', { p: 1 }), error: '429' }),
+    otlpSpan(tid, { spanId: '3', name: 't', startMs: 5, endMs: 6, attrs: toolAttrs('jira.createIssue', { p: 1 }), error: '429' }),
+    otlpSpan(tid, { spanId: '4', name: 't', startMs: 7, endMs: 8, attrs: toolAttrs('jira.createIssue', { p: 1 }) }),
+    otlpSpan(tid, { spanId: '5', name: 't', startMs: 9, endMs: 10, attrs: toolAttrs('gitlab.searchCode', { q: 'x' }) }),
+  ]));
+  const a = annotateSteps(t);
+  assert.equal(a[0].repeatOf, undefined);
+  assert.equal(a[1].error, '429');
+  assert.equal(a[1].attempt, undefined);
+  assert.equal(a[2].attempt, 2);
+  assert.equal(a[3].attempt, 3);
+  assert.equal(a[3].repeatOf, undefined); // retry, pas boucle
+  assert.equal(a[4].repeatOf, 0);
+  const m = computeMetrics(t);
+  assert.equal(m.redundantToolCalls, a.filter((x) => x.repeatOf !== undefined).length);
+  assert.equal(m.retryCount, a.filter((x) => x.attempt !== undefined).length);
+});
+
+test('chemin : répétition visible, relance ignorée', () => {
+  const tid = 'path';
+  const t = normalize(otlpPayload([
+    otlpSpan(tid, { spanId: '1', name: 't', startMs: 1, endMs: 2, attrs: toolAttrs('search', { q: 1 }) }),
+    otlpSpan(tid, { spanId: '2', name: 't', startMs: 3, endMs: 4, attrs: toolAttrs('search', { q: 1 }) }),
+    otlpSpan(tid, { spanId: '3', name: 't', startMs: 5, endMs: 6, attrs: toolAttrs('jira', { a: 1 }), error: '429' }),
+    otlpSpan(tid, { spanId: '4', name: 't', startMs: 7, endMs: 8, attrs: toolAttrs('jira', { a: 1 }) }),
+  ]));
+  assert.equal(computeMetrics(t).pathSignature, 'search ×2 → jira');
 });

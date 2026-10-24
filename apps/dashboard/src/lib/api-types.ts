@@ -1,25 +1,20 @@
-export interface TrajectorySummary {
-  id: string;
-  source: 'live' | 'replay' | 'simulation';
-  sourceFormat: string | null;
-  stepCount: number;
-  totalCostUsd: number | null;
-  totalDurationMs: number | null;
-  createdAt: string; // ISO 8601
-}
+/**
+ * Formes des réponses de l'API — source unique, importée par les routes
+ * et par quiconque consomme l'API. Les types de données viennent de
+ * src/server (pas de duplication).
+ */
 
-export interface ListTrajectoriesResponse {
-  items: TrajectorySummary[];
-  nextCursor: string | null;
-}
+export type { AgentOverview, TimeseriesPoint, VersionStats, ComparisonResult, RunSummary } from '../server/queries';
+export type { AlertRow } from '../server/alerts';
+export type { IngestedRun } from '../server/ingest';
 
 export interface IngestResponse {
-  trajectories: Array<{
-    id: string;
-    sourceFormat: string | null;
-    stepCount: number;
-    createdAt: string;
-  }>;
+  trajectories: import('../server/ingest').IngestedRun[];
+}
+
+export interface ListRunsResponse {
+  items: import('../server/queries').RunSummary[];
+  nextCursor: string | null;
 }
 
 export interface StatsResponse {
@@ -34,8 +29,10 @@ export type ApiErrorCode =
   | 'UNAUTHORIZED'
   | 'VALIDATION_ERROR'
   | 'UNKNOWN_FORMAT'
+  | 'UNSUPPORTED_MEDIA_TYPE'
   | 'NOT_FOUND'
   | 'RATE_LIMITED'
+  | 'NOT_CONFIGURED'
   | 'INTERNAL_ERROR';
 
 export interface ApiError {

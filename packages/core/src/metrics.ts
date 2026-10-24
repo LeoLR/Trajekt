@@ -41,14 +41,14 @@ export interface RunMetrics {
   costEstimated: boolean;
   redundantToolCalls: number;
   retryCount: number;
-  /** Outils dans l'ordre, répétitions consécutives fusionnées. */
+  /** Outils dans l'ordre ; relances ignorées, répétitions consécutives notées « ×n ». */
   toolPath: string[];
   pathSignature: string;
   /** Modèle le plus utilisé du run. */
   primaryModel?: string;
 }
 
-export const NO_TOOL_PATH = '(aucun outil)';
+export const NO_TOOL_PATH = '(no tools)';
 const MAX_SIGNATURE_LENGTH = 500;
 
 function hasError(s: TrajectoryStep): boolean {
@@ -154,16 +154,17 @@ export function computeMetrics(t: Trajectory): RunMetrics {
     costKnown = true;
   }
 
-  // Boucles : même outil + mêmes arguments qu'un appel précédent. Sans
-  // arguments capturés on ne conclut rien (un outil peut légitimement
-  // être appelé plusieurs fois).
-  const seen = new Set<string>();
+  // Boucles : même outil + mêmes arguments qu'un appel précédent qui,
+  // lui, avait RÉUSSI. Relancer après un échec est un retry (compté à
+  // part), pas une boucle. Sans arguments capturés on ne conclut rien :
+  // un outil peut légitimement être appelé plusieurs fois.
+  const lastOutcome = new Map<string, 'ok' | 'error'>();
   let redundantToolCalls = 0;
   for (const s of tools) {
     if (s.args === undefined) continue;
     const key = `${s.name}::${stableStringify(s.args)}`;
-    if (seen.has(key)) redundantToolCalls++;
-    else seen.add(key);
+    if (lastOutcome.get(key) === 'ok') redundantToolCalls++;
+    lastOutcome.set(key, hasError(s) ? 'error' : 'ok');
   }
 
   // Retries : un step qui suit immédiatement l'échec d'un step du même
@@ -176,8 +177,23 @@ export function computeMetrics(t: Trajectory): RunMetrics {
     if (hasError(prev) && prev.type === cur.type && stepName(prev) === stepName(cur)) retryCount++;
   }
 
+  // Chemin d'outils : les relances après échec sont ignorées (même
+  // stratégie, juste un incident), mais une répétition d'un appel réussi
+  // reste visible ("gitlab.searchCode ×2") — c'est un changement de
+  // comportement qu'on veut voir apparaître comme un chemin distinct.
+  const effective: string[] = [];
+  tools.forEach((s, i) => {
+    const prev = tools[i - 1];
+    if (prev && hasError(prev) && prev.name === s.name) return;
+    effective.push(s.name);
+  });
   const toolPath: string[] = [];
-  for (const s of tools) if (toolPath[toolPath.length - 1] !== s.name) toolPath.push(s.name);
+  for (let i = 0; i < effective.length; ) {
+    let j = i;
+    while (j < effective.length && effective[j] === effective[i]) j++;
+    toolPath.push(j - i > 1 ? `${effective[i]} ×${j - i}` : effective[i]);
+    i = j;
+  }
   let pathSignature = toolPath.length ? toolPath.join(' → ') : NO_TOOL_PATH;
   if (pathSignature.length > MAX_SIGNATURE_LENGTH) {
     pathSignature = pathSignature.slice(0, MAX_SIGNATURE_LENGTH - 1) + '…';
@@ -203,4 +219,54 @@ export function computeMetrics(t: Trajectory): RunMetrics {
     pathSignature,
     primaryModel,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Annotations par step (pour la timeline)                              */
+/* ------------------------------------------------------------------ */
+
+export interface StepAnnotation {
+  /** Index du step. */
+  index: number;
+  /** Step en erreur. */
+  error?: string;
+  /** Relance d'un step identique qui venait d'échouer (n° de tentative, 2 = 1er retry). */
+  attempt?: number;
+  /** Même outil + mêmes arguments qu'un appel précédent réussi : index de cet appel. */
+  repeatOf?: number;
+}
+
+/**
+ * Les mêmes règles que computeMetrics, step par step : ce qui permet
+ * d'afficher « REPEAT #5 » ou « RETRY ×2 » directement sur la timeline.
+ */
+export function annotateSteps(t: Trajectory): StepAnnotation[] {
+  const out: StepAnnotation[] = t.steps.map((s) => ({
+    index: s.index,
+    error: hasError(s) ? (s as { error?: string }).error : undefined,
+  }));
+  const firstOk = new Map<string, number>();
+  const lastOutcome = new Map<string, 'ok' | 'error'>();
+  t.steps.forEach((s, i) => {
+    if (s.type !== 'tool_call' || s.args === undefined) return;
+    const key = `${s.name}::${stableStringify(s.args)}`;
+    if (lastOutcome.get(key) === 'ok') out[i].repeatOf = firstOk.get(key);
+    if (!hasError(s) && !firstOk.has(key)) firstOk.set(key, s.index);
+    lastOutcome.set(key, hasError(s) ? 'error' : 'ok');
+  });
+  const meaningful = t.steps
+    .map((s, i) => ({ s, i }))
+    .filter(({ s }) => s.type === 'llm_call' || s.type === 'tool_call');
+  let attempt = 1;
+  for (let k = 1; k < meaningful.length; k++) {
+    const prev = meaningful[k - 1].s;
+    const cur = meaningful[k];
+    if (hasError(prev) && prev.type === cur.s.type && stepName(prev) === stepName(cur.s)) {
+      attempt += 1;
+      out[cur.i].attempt = attempt;
+    } else {
+      attempt = 1;
+    }
+  }
+  return out;
 }

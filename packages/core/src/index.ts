@@ -54,7 +54,9 @@ export { mergeTrajectories, sortAndReindex } from './merge.js';
 
 export {
   computeMetrics,
+  annotateSteps,
   stableStringify,
+  type StepAnnotation,
   NO_TOOL_PATH,
   type RunMetrics,
 } from './metrics.js';

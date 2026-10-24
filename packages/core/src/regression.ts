@@ -79,14 +79,14 @@ export interface CompareOptions {
 }
 
 export const METRIC_LABELS: Record<MetricKey, string> = {
-  errorRate: "Taux d'échec des runs",
-  toolErrorRate: "Taux d'échec des outils",
-  durationMs: 'Durée moyenne',
-  costUsd: 'Coût moyen',
-  stepCount: 'Steps par run',
-  totalTokens: 'Tokens par run',
-  redundantToolCalls: 'Appels d’outil répétés',
-  newPathShare: 'Runs sur un chemin inédit',
+  errorRate: 'Failed runs',
+  toolErrorRate: 'Failed tool calls',
+  durationMs: 'Mean duration',
+  costUsd: 'Mean cost',
+  stepCount: 'Steps per run',
+  totalTokens: 'Tokens per run',
+  redundantToolCalls: 'Repeated tool calls',
+  newPathShare: 'Runs on a new tool path',
 };
 
 /* ------------------------------------------------------------------ */
@@ -141,7 +141,7 @@ function compareRate(
       metric, label,
       baseline: n0 ? x0 / n0 : null, current: n1 ? x1 / n1 : null,
       delta: null, relDelta: null, pValue: null, verdict: 'insufficient',
-      detail: `${n0} vs ${n1} — minimum ${minN} de chaque côté`,
+      detail: `${n0} vs ${n1} — need at least ${minN} on each side`,
     };
   }
   const b = x0 / n0;
@@ -172,7 +172,7 @@ function compareMean(
       metric, label,
       baseline: a.n ? a.mean : null, current: b.n ? b.mean : null,
       delta: null, relDelta: null, pValue: null, verdict: 'insufficient',
-      detail: `${a.n} vs ${b.n} runs — minimum ${o.minRuns} de chaque côté`,
+      detail: `${a.n} vs ${b.n} runs — need at least ${o.minRuns} on each side`,
     };
   }
   const delta = b.mean - a.mean;
@@ -202,7 +202,7 @@ function comparePaths(a: WindowStats, b: WindowStats, o: Required<CompareOptions
     return {
       metric: 'newPathShare', label, baseline: null, current: null, delta: null,
       relDelta: null, pValue: null, verdict: 'insufficient',
-      detail: `${a.runs} vs ${b.runs} runs — minimum ${o.minRuns} de chaque côté`,
+      detail: `${a.runs} vs ${b.runs} runs — need at least ${o.minRuns} on each side`,
     };
   }
   const known = new Set(Object.keys(a.paths));
@@ -223,7 +223,7 @@ function comparePaths(a: WindowStats, b: WindowStats, o: Required<CompareOptions
   return {
     metric: 'newPathShare', label, baseline: 0, current: share, delta: share,
     relDelta: null, pValue: null, verdict, severity,
-    detail: topNew ? `Chemin le plus fréquent parmi les inédits : ${topNew[0]} (${topNew[1]} runs)` : undefined,
+    detail: topNew ? `Most common new path: ${topNew[0]} (${topNew[1]} runs)` : undefined,
   };
 }
 

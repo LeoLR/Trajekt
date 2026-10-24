@@ -1,36 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
-import { db } from '../../../../db/index.js';
-import { trajectories } from '../../../../db/schema.js';
-import { isAuthenticatedDashboardRequest } from '../../../../lib/session.js';
-import { getDefaultProject } from '../../../../lib/project.js';
-import { apiError } from '../../../../lib/errors.js';
+import { NextResponse } from 'next/server';
+import { dashboardRoute } from '../../../../lib/route';
+import { apiError } from '../../../../lib/errors';
+import { getRun } from '../../../../server/queries';
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isAuthenticatedDashboardRequest(req)) {
-    return apiError('UNAUTHORIZED', 'Session invalide ou expirée.');
-  }
-
-  const project = await getDefaultProject();
-
-  const [row] = await db
-    .select()
-    .from(trajectories)
-    .where(and(eq(trajectories.id, params.id), eq(trajectories.projectId, project.id)))
-    .limit(1);
-
-  if (!row) {
-    return apiError('NOT_FOUND', `Aucune trajectoire avec l'id ${params.id}.`);
-  }
-
-  // Reconstruit exactement la forme Trajectory de @trajekt/core —
-  // le visualiseur n'a besoin d'aucune transformation supplémentaire.
-  return NextResponse.json({
-    schemaVersion: row.schemaVersion,
-    id: row.id,
-    source: row.source,
-    steps: row.steps,
-    metadata: row.metadata,
-    createdAt: row.createdAt.toISOString(),
-  });
-}
+/** Phase 1 (rétrocompatible) : renvoie la Trajectory seule, telle que normalize() la produit. */
+export const GET = dashboardRoute(async ({ req, db, project }) => {
+  const id = req.nextUrl.pathname.split('/').pop() ?? '';
+  const run = await getRun(db, project.id, id);
+  if (!run) return apiError('NOT_FOUND', `No trajectory with id ${id}.`);
+  return NextResponse.json(run.trajectory);
+});

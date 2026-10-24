@@ -1,60 +1,56 @@
+/**
+ * POST /v1/traces — ingestion (OTLP/HTTP JSON, export Langfuse,
+ * résultat Vercel AI SDK, ou Trajectory native).
+ *
+ * Compatible avec un exporter OTel pointé sur la racine de Trajekt :
+ * l'exporter ajoute lui-même /v1/traces. Encodage JSON uniquement
+ * (OTEL_EXPORTER_OTLP_PROTOCOL=http/json) ; gzip accepté.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
-import { normalizeAll, totalCostUsd, UnknownFormatError } from '@trajekt/core';
-import { db } from '../../../db/index.js';
-import { trajectories } from '../../../db/schema.js';
-import { verifyProjectApiKey } from '../../../lib/auth.js';
-import { apiError } from '../../../lib/errors.js';
+import { gunzipSync } from 'node:zlib';
+import { UnknownFormatError } from '@trajekt/core';
+import { getDb } from '../../../server/db';
+import { verifyProjectApiKey } from '../../../server/auth';
+import { ingestPayload } from '../../../server/ingest';
+import { apiError } from '../../../lib/errors';
+
+export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
-  const project = await verifyProjectApiKey(req.headers.get('authorization'));
-  if (!project) return apiError('UNAUTHORIZED', 'Clé API de projet absente ou invalide.');
+  const db = getDb();
+  const project = await verifyProjectApiKey(db, req.headers.get('authorization'));
+  if (!project) return apiError('UNAUTHORIZED', 'Missing or invalid project API key.');
+
+  const contentType = req.headers.get('content-type') ?? '';
+  if (contentType.includes('protobuf')) {
+    return apiError(
+      'UNSUPPORTED_MEDIA_TYPE',
+      'OTLP protobuf is not supported yet. Configure the exporter with OTEL_EXPORTER_OTLP_PROTOCOL=http/json.',
+    );
+  }
 
   let raw: unknown;
   try {
-    raw = await req.json();
+    let body = Buffer.from(await req.arrayBuffer());
+    if (req.headers.get('content-encoding') === 'gzip') body = gunzipSync(body);
+    raw = JSON.parse(body.toString('utf8'));
   } catch {
-    return apiError('VALIDATION_ERROR', 'Corps de requête JSON invalide.');
+    return apiError('VALIDATION_ERROR', 'Request body is not valid JSON.');
   }
 
-  let results;
   try {
-    // normalizeAll(), pas normalize() : un payload OTLP peut multiplexer
-    // plusieurs traces dans un seul envoi (comportement par défaut du
-    // batching des exporters OTel) — voir la note dans packages/core.
-    results = normalizeAll(raw);
+    const runs = await ingestPayload(db, project.id, raw, {
+      agentName: req.headers.get('x-trajekt-agent') ?? undefined,
+      agentVersion: req.headers.get('x-trajekt-agent-version') ?? undefined,
+      promptVersion: req.headers.get('x-trajekt-prompt-version') ?? undefined,
+      environment: req.headers.get('x-trajekt-environment') ?? undefined,
+    });
+    if (runs.length === 0) return apiError('VALIDATION_ERROR', 'No usable trace in this payload.');
+    return NextResponse.json({ trajectories: runs }, { status: 201 });
   } catch (e) {
     if (e instanceof UnknownFormatError) return apiError('UNKNOWN_FORMAT', e.message);
-    return apiError('VALIDATION_ERROR', e instanceof Error ? e.message : 'Payload invalide.');
+    console.error(e);
+    return apiError('INTERNAL_ERROR', 'Ingestion failed.');
   }
-
-  if (results.length === 0) {
-    return apiError('VALIDATION_ERROR', 'Aucune trace exploitable dans ce payload.');
-  }
-
-  const inserted = await db
-    .insert(trajectories)
-    .values(
-      results.map((t) => {
-        const cost = totalCostUsd(t);
-        return {
-          projectId: project.id,
-          schemaVersion: t.schemaVersion,
-          source: t.source,
-          sourceFormat: (t.metadata.sourceFormat as string) ?? null,
-          steps: t.steps,
-          metadata: t.metadata,
-          totalCostUsd: cost > 0 ? cost.toFixed(6) : null,
-          totalDurationMs: (t.metadata.totalDurationMs as number) ?? null,
-          stepCount: t.steps.length,
-        };
-      }),
-    )
-    .returning({
-      id: trajectories.id,
-      sourceFormat: trajectories.sourceFormat,
-      stepCount: trajectories.stepCount,
-      createdAt: trajectories.createdAt,
-    });
-
-  return NextResponse.json({ trajectories: inserted }, { status: 201 });
 }
