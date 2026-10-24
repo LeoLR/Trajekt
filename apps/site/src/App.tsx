@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Recorder } from './Recorder';
+import { Playground } from './Playground';
 
 export const REPO_URL = 'https://github.com/LeoLR/trajekt';
 const DOCS_URL = `${REPO_URL}#readme`;
@@ -167,6 +168,7 @@ export function App() {
           <a href="/" aria-label="Trajekt home"><Logo /></a>
           <nav className="header-nav" aria-label="Main">
             <a href="#how">How it works</a>
+            <a href="#try">Try it</a>
             <a href={DOCS_URL}>Docs</a>
             <a href={REPO_URL}>GitHub</a>
           </nav>
@@ -218,6 +220,18 @@ export function App() {
                 <CompareVisual />
               </article>
             </div>
+          </div>
+        </section>
+
+        <section className="section" id="try">
+          <div className="container">
+            <div className="try-head">
+              <div>
+                <h2 className="h2">Try it on a real trace.</h2>
+                <p className="lead">Load an example — or your own export — and replay it step by step, with loops, retries and failures flagged.</p>
+              </div>
+            </div>
+            <Playground />
           </div>
         </section>
 

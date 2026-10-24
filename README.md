@@ -104,7 +104,7 @@ Trajekt recognises spans that follow the OpenTelemetry GenAI semantic convention
 
 #### Send a trace file
 
-A Langfuse trace export, a Vercel AI SDK `generateText` result or an OTLP/JSON file can be posted as-is:
+A Langfuse trace export, a Vercel AI SDK `generateText` result or an OTLP/JSON file can be posted as-is (examples of each in [`docs/assets/samples`](docs/assets/samples)):
 
 ```bash
 curl -X POST http://localhost:3000/v1/traces \

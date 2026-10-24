@@ -52,8 +52,9 @@ export function detectFormat(input: unknown): string | undefined {
 export class UnknownFormatError extends Error {
   constructor(hint: string) {
     super(
-      `Format de trace non reconnu (${hint}). Formats natifs : trajekt, ` +
-        `langfuse, otlp, ai-sdk. Pour un format custom : registerNormalizer().`,
+      `Unrecognized trace format (${hint}). Supported: Langfuse trace export, ` +
+        `OTLP/JSON, Vercel AI SDK result, Trajekt trajectory. ` +
+        `For a custom format, use registerNormalizer().`,
     );
     this.name = 'UnknownFormatError';
   }
@@ -371,6 +372,7 @@ const aiSdkNormalizer: Normalizer = {
       steps.push({
         index: steps.length,
         type: 'llm_call',
+        model: s.response?.modelId ?? s.modelId ?? result.response?.modelId ?? undefined,
         input: [],
         output: s.text ? { role: 'assistant', content: s.text } : undefined,
         usage: s.usage
@@ -512,8 +514,8 @@ function nanoToIso(nano: unknown): string | undefined {
 }
 
 function describeShape(v: unknown): string {
-  if (!isObj(v)) return `type ${typeof v}`;
-  return `clés racine : ${Object.keys(v).slice(0, 8).join(', ') || 'aucune'}`;
+  if (!isObj(v)) return `got ${Array.isArray(v) ? 'an array' : typeof v}`;
+  return `top-level keys: ${Object.keys(v).slice(0, 8).join(', ') || 'none'}`;
 }
 
 function cryptoRandomId(): string {

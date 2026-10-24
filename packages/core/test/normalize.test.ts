@@ -131,3 +131,9 @@ test('diff : alignement step par step, marqueurs = ≠ + −', () => {
   assert.deepEqual(d.counts, { '=': 3, '≠': 1, '+': 3, '−': 1 });
   assert.equal(d.b.status, 'error');
 });
+
+test('AI SDK : modèle lu dans response.modelId (permet l’estimation du coût)', () => {
+  const t = normalize({ steps: [{ text: 'ok', usage: { promptTokens: 1e6, completionTokens: 0 }, response: { modelId: 'gpt-4o-mini' }, toolCalls: [] }] });
+  assert.equal((t.steps[0] as any).model, 'gpt-4o-mini');
+  assert.equal(computeMetrics(t).costUsd, 0.15);
+});

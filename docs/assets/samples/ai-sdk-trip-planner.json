@@ -1,0 +1,138 @@
+{
+  "text": "Your flight to Lisbon is booked for Friday at 07:40, and it should be sunny there all weekend.",
+  "steps": [
+    {
+      "stepType": "initial",
+      "text": "",
+      "usage": {
+        "promptTokens": 520,
+        "completionTokens": 64
+      },
+      "toolCalls": [
+        {
+          "toolCallId": "c1",
+          "toolName": "flights.search",
+          "args": {
+            "from": "NTE",
+            "to": "LIS",
+            "date": "2026-10-30"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "toolCallId": "c1",
+          "toolName": "flights.search",
+          "result": {
+            "options": [
+              {
+                "id": "TP1123",
+                "departs": "07:40",
+                "price": 142
+              }
+            ]
+          }
+        }
+      ],
+      "response": {
+        "modelId": "gpt-4o-mini"
+      }
+    },
+    {
+      "stepType": "tool-result",
+      "text": "",
+      "usage": {
+        "promptTokens": 790,
+        "completionTokens": 58
+      },
+      "toolCalls": [
+        {
+          "toolCallId": "c2",
+          "toolName": "flights.search",
+          "args": {
+            "from": "NTE",
+            "to": "LIS",
+            "date": "2026-10-30"
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "toolCallId": "c2",
+          "toolName": "flights.search",
+          "result": {
+            "options": [
+              {
+                "id": "TP1123",
+                "departs": "07:40",
+                "price": 142
+              }
+            ]
+          }
+        }
+      ],
+      "response": {
+        "modelId": "gpt-4o-mini"
+      }
+    },
+    {
+      "stepType": "tool-result",
+      "text": "",
+      "usage": {
+        "promptTokens": 1010,
+        "completionTokens": 71
+      },
+      "toolCalls": [
+        {
+          "toolCallId": "c3",
+          "toolName": "flights.book",
+          "args": {
+            "flightId": "TP1123",
+            "passengers": 1
+          }
+        },
+        {
+          "toolCallId": "c4",
+          "toolName": "weather.forecast",
+          "args": {
+            "city": "Lisbon",
+            "days": 3
+          }
+        }
+      ],
+      "toolResults": [
+        {
+          "toolCallId": "c3",
+          "toolName": "flights.book",
+          "result": {
+            "confirmation": "QX7K2P"
+          }
+        },
+        {
+          "toolCallId": "c4",
+          "toolName": "weather.forecast",
+          "result": {
+            "summary": "sunny",
+            "highC": 24
+          }
+        }
+      ],
+      "response": {
+        "modelId": "gpt-4o-mini"
+      }
+    },
+    {
+      "stepType": "tool-result",
+      "text": "Your flight to Lisbon is booked for Friday at 07:40, and it should be sunny there all weekend.",
+      "usage": {
+        "promptTokens": 1240,
+        "completionTokens": 32
+      },
+      "toolCalls": [],
+      "toolResults": [],
+      "response": {
+        "modelId": "gpt-4o-mini"
+      }
+    }
+  ]
+}
