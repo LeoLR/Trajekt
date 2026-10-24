@@ -13,4 +13,13 @@ export default defineConfig({
   // tels quels par le site : une seule source pour les deux.
   publicDir: '../../docs/assets',
   server: { port: 5173 },
+  build: {
+    rollupOptions: {
+      // Deux pages : la landing et la documentation (/docs/).
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        docs: fileURLToPath(new URL('./docs/index.html', import.meta.url)),
+      },
+    },
+  },
 });
