@@ -3,7 +3,7 @@
  * pour être testable (et rendu hors de Next pour les captures).
  */
 
-import { annotateSteps, type Comparison, type StepAnnotation } from '@trajekt/core';
+import { annotateSteps, diffTrajectories, type Comparison, type StepAnnotation, type TrajectoryDiff } from '@trajekt/core';
 import type { Db } from './db';
 import {
   agentTimeseries, agentVersions, compareLatestVersions, compareRecentWindow, getRun,
@@ -142,4 +142,51 @@ export async function loadRunPage(db: Db, projectId: string, id: string): Promis
   const run = await getRun(db, projectId, id);
   if (!run) return null;
   return { ...run, annotations: annotateSteps(run.trajectory), previousId: await previousRunId(db, projectId, run.summary) };
+}
+
+export interface ComparePageData {
+  a: RunDetail;
+  b: RunDetail;
+  diff: TrajectoryDiff;
+  /** Comment A a été choisi quand l'URL ne le précise pas. */
+  baselineReason: 'explicit' | 'previous-version' | 'previous-run';
+}
+
+/**
+ * Compare le run `id` (B) à `withId` (A). Sans `withId` : le dernier run
+ * réussi de la version précédente de l'agent, sinon le run précédent.
+ */
+export async function loadComparePage(db: Db, projectId: string, id: string, withId?: string): Promise<ComparePageData | null> {
+  const b = await getRun(db, projectId, id);
+  if (!b) return null;
+  let a: RunDetail | null = null;
+  let reason: ComparePageData['baselineReason'] = 'explicit';
+  if (withId) {
+    a = await getRun(db, projectId, withId);
+  } else {
+    const versions = (await agentVersions(db, projectId, b.summary.agentName)).filter((v) => v.version !== null);
+    const idx = versions.findIndex((v) => v.version === b.summary.agentVersion);
+    const prev = idx >= 0 ? versions[idx + 1] : undefined;
+    if (prev) {
+      const [row] = await db.query<{ id: string }>(
+        `select id from trajectories
+          where project_id = $1 and agent_name = $2 and agent_version = $3 and status = 'ok'
+          order by started_at desc limit 1`,
+        [projectId, b.summary.agentName, prev.version],
+      );
+      if (row) {
+        a = await getRun(db, projectId, row.id);
+        reason = 'previous-version';
+      }
+    }
+    if (!a) {
+      const prevId = await previousRunId(db, projectId, b.summary);
+      if (prevId) {
+        a = await getRun(db, projectId, prevId);
+        reason = 'previous-run';
+      }
+    }
+  }
+  if (!a) return null;
+  return { a, b, diff: diffTrajectories(a.trajectory, b.trajectory), baselineReason: reason };
 }

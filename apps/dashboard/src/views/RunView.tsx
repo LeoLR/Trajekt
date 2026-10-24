@@ -35,6 +35,7 @@ export function RunView({ data }: { data: RunPageData }) {
         </div>
         <div className="row">
           {data.previousId && <a className="btn btn-ghost" href={`/runs/${data.previousId}`}>← Previous run</a>}
+          {data.previousId && <a className="btn btn-ghost" href={`/runs/${s.id}/compare`}>Compare</a>}
           <a className="btn btn-ghost" href={`/api/runs/${s.id}`}>JSON</a>
         </div>
       </div>

@@ -287,15 +287,22 @@ function otlpFromEntries(entries: OtlpEntry[]): Trajectory {
         attrs['gen_ai.usage.output_tokens'] ?? attrs['gen_ai.usage.completion_tokens'] ??
           attrs['ai.usage.completionTokens'] ?? attrs['ai.usage.outputTokens'],
       );
-      const text = str(attrs['ai.response.text']);
+      // Messages : conventions GenAI récentes (gen_ai.input/output.messages)
+      // et Vercel AI SDK (ai.prompt.messages, ai.response.text). Présents
+      // seulement si l'instrumentation capture le contenu.
+      const input = toMessages(
+        maybeJson(attrs['gen_ai.input.messages'] ?? attrs['ai.prompt.messages'] ?? attrs['ai.prompt']),
+      ).map(({ role, content }) => ({ role, content: content.slice(0, 8000) }));
+      const outMessages = toMessages(maybeJson(attrs['gen_ai.output.messages']));
+      const text = str(attrs['ai.response.text']) ?? outMessages[0]?.content;
       return {
         ...base,
         type: 'llm_call' as const,
         model: str(
           attrs['gen_ai.response.model'] ?? attrs['gen_ai.request.model'] ?? attrs['ai.model.id'],
         ),
-        input: [],
-        output: text ? { role: 'assistant' as const, content: text.slice(0, 4000) } : undefined,
+        input,
+        output: text ? { role: 'assistant' as const, content: text.slice(0, 8000) } : undefined,
         usage:
           inputTokens !== undefined || outputTokens !== undefined
             ? { inputTokens, outputTokens }
@@ -412,13 +419,26 @@ function allNormalizers(): Normalizer[] {
 /* Utilitaires internes                                                */
 /* ------------------------------------------------------------------ */
 
+function contentText(c: unknown): string {
+  if (typeof c === 'string') return c;
+  // Contenu en "parts" ([{type:'text', text|content}, ...]) : AI SDK, semconv GenAI.
+  if (Array.isArray(c)) {
+    const texts = c
+      .map((p: any) => (typeof p === 'string' ? p : p?.text ?? (typeof p?.content === 'string' ? p.content : undefined)))
+      .filter((t): t is string => typeof t === 'string');
+    if (texts.length) return texts.join('\n');
+  }
+  return JSON.stringify(c);
+}
+
 function toMessages(io: unknown): Message[] {
+  if (isObj(io) && Array.isArray((io as any).messages)) return toMessages((io as any).messages);
   if (Array.isArray(io)) {
     return io
       .filter(isObj)
       .map((m: any) => ({
         role: m.role ?? 'user',
-        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+        content: contentText(m.content ?? m.parts),
         raw: m,
       }));
   }

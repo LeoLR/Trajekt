@@ -11,6 +11,7 @@ import {
 import { checkRegressions, recentAlerts, slackMessage } from '../src/server/alerts';
 import { simulateTraffic, sentryTriageRun, rng } from '../src/server/simulate';
 import { createSessionToken, isValidSessionToken } from '../src/lib/session';
+import { loadComparePage } from '../src/server/pages';
 import { UnknownFormatError } from '@trajekt/core';
 
 let ctx: Awaited<ReturnType<typeof freshDb>>;
@@ -146,6 +147,15 @@ test('liste des runs : filtres et pagination stable', async () => {
 
   const prev = await previousRunId(db, projectId, page1.items[0]);
   assert.equal(prev, page1.items[1].id);
+
+  // Comparaison : un run v1.5.0 face au dernier run réussi de la v1.4.0.
+  const cmp = await loadComparePage(db, projectId, loops15.items[0].id);
+  assert.ok(cmp);
+  assert.equal(cmp.baselineReason, 'previous-version');
+  assert.equal(cmp.a.summary.agentVersion, '1.4.0');
+  assert.equal(cmp.a.summary.status, 'ok');
+  assert.ok(cmp.diff.counts['+'] > 0);
+  assert.equal(await loadComparePage(db, projectId, '00000000-0000-0000-0000-000000000000'), null);
 
   const stats = await projectStats(db, projectId, null);
   assert.ok(stats.totalRuns > 0 && stats.totalCostUsd > 0);

@@ -85,3 +85,10 @@ export {
   type Verdict,
   type Severity,
 } from './regression.js';
+
+export {
+  diffTrajectories,
+  type DiffMark,
+  type DiffRow,
+  type TrajectoryDiff,
+} from './diff.js';

@@ -22,6 +22,8 @@ import { AgentView } from '../src/views/AgentView';
 import { RunsView } from '../src/views/RunsView';
 import { RunView } from '../src/views/RunView';
 import { LoginView } from '../src/views/LoginView';
+import { CompareView } from '../src/views/CompareView';
+import { loadComparePage } from '../src/server/pages';
 
 const out = process.argv[2] ?? 'preview';
 const now = new Date();
@@ -54,6 +56,7 @@ async function main() {
     const loops = await listRuns(ctx.db, project.id, { agent: 'sentry-triage', version: '1.5.0', loopsOnly: true, limit: 200 });
     const best = [...loops.items].sort((a, b) => (b.redundantToolCalls + b.retryCount + (b.status === 'error' ? 2 : 0)) - (a.redundantToolCalls + a.retryCount + (a.status === 'error' ? 2 : 0)))[0];
     await write('run', <RunView data={(await loadRunPage(ctx.db, project.id, best.id))!} />);
+    await write('compare', <CompareView data={(await loadComparePage(ctx.db, project.id, best.id))!} />);
     const healthy = (await listRuns(ctx.db, project.id, { agent: 'support-bot', limit: 1 })).items[0];
     await write('run-langfuse', <RunView data={(await loadRunPage(ctx.db, project.id, healthy.id))!} />);
     await write('login', <LoginView error={true} next="/" configured={true} />);

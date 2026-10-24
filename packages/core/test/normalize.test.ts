@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalize, normalizeAll, mergeTrajectories, computeMetrics } from '../src/index.js';
+import { normalize, normalizeAll, mergeTrajectories, computeMetrics, diffTrajectories } from '../src/index.js';
 import { otlpPayload, otlpSpan, sentryRun, langfuseTrace, toolAttrs } from './fixtures.js';
 
 test('OTLP : identité de l’agent lue sur la racine puis la ressource', () => {
@@ -95,4 +95,39 @@ test('Fusion : une trace en deux lots = un seul run, sans doublon, idempotente',
   // Avant la racine, le run est vu "en cours" ; après, sa durée est complète.
   assert.equal(computeMetrics(first).durationMs, 2990);
   assert.equal(computeMetrics(merged).durationMs, 3300);
+});
+
+test('OTLP : messages du prompt et réponse lus quand l’instrumentation les capture', () => {
+  const tid = 'msg';
+  const t = normalize(otlpPayload([
+    otlpSpan(tid, { spanId: 'a', name: 'chat', startMs: 1, endMs: 2, attrs: {
+      'gen_ai.request.model': { stringValue: 'gpt-4o' },
+      'gen_ai.input.messages': { stringValue: JSON.stringify([{ role: 'system', parts: [{ type: 'text', content: 'You triage bugs.' }] }, { role: 'user', parts: [{ type: 'text', content: 'NPE in payment.ts' }] }]) },
+      'gen_ai.output.messages': { stringValue: JSON.stringify([{ role: 'assistant', parts: [{ type: 'text', content: 'Create a ticket.' }] }]) },
+    } }),
+    otlpSpan(tid, { spanId: 'b', name: 'ai.generateText.doGenerate', startMs: 3, endMs: 4, attrs: {
+      'ai.model.id': { stringValue: 'gpt-4o-mini' },
+      'ai.prompt.messages': { stringValue: JSON.stringify([{ role: 'user', content: [{ type: 'text', text: 'hello' }] }]) },
+      'ai.response.text': { stringValue: 'hi' },
+    } }),
+  ]));
+  const [a, b] = t.steps as any[];
+  assert.deepEqual(a.input.map((m: any) => [m.role, m.content]), [['system', 'You triage bugs.'], ['user', 'NPE in payment.ts']]);
+  assert.equal(a.output.content, 'Create a ticket.');
+  assert.deepEqual(b.input.map((m: any) => m.content), ['hello']);
+  assert.equal(b.output.content, 'hi');
+});
+
+test('diff : alignement step par step, marqueurs = ≠ + −', () => {
+  const tid = 'diff';
+  const mk = (specs: Array<[string, unknown, string?]>) => normalize(otlpPayload(specs.map(([name, args, error], i) =>
+    otlpSpan(tid, { spanId: String(i), name: 't', startMs: i * 10, endMs: i * 10 + 5, attrs: name === 'llm' ? { 'gen_ai.request.model': { stringValue: 'm' } } : toolAttrs(name, args), error }),
+  )));
+  const a = mk([['sentry', { id: 1 }], ['llm', undefined], ['search', { q: 'x' }], ['jira', { p: 1 }], ['slack', {}]]);
+  const b = mk([['sentry', { id: 1 }], ['llm', undefined], ['search', { q: 'x' }], ['llm', undefined], ['search', { q: 'x' }], ['jira', { p: 2 }], ['mr', {}, '422']]);
+  const d = diffTrajectories(a, b);
+  assert.deepEqual(d.rows.map((r) => r.mark), ['=', '=', '=', '+', '+', '≠', '−', '+']);
+  assert.deepEqual(d.rows[5].changes, ['args']);
+  assert.deepEqual(d.counts, { '=': 3, '≠': 1, '+': 3, '−': 1 });
+  assert.equal(d.b.status, 'error');
 });
