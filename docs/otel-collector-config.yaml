@@ -1,0 +1,26 @@
+# otel-collector-config.yaml
+#
+# Un seul processus local, aucun service tiers. Reçoit les spans en OTLP,
+# les écrit tels quels en JSON — exactement le format que lit
+# normalize() côté trajekt/core (resourceSpans[].scopeSpans[].spans[]).
+#
+# Lancer :
+#   docker run -p 4318:4318 -v $(pwd):/out \
+#     -v $(pwd)/otel-collector-config.yaml:/etc/otelcol/config.yaml \
+#     otel/opentelemetry-collector:latest --config /etc/otelcol/config.yaml
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  file:
+    path: /out/traces.json
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [file]

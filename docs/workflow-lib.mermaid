@@ -1,0 +1,67 @@
+flowchart TB
+    subgraph SOURCES["📥 Sources de trajectoires"]
+        LF[Langfuse Provider<br/><i>traces réelles</i>]
+        OTEL[OTel Provider<br/><i>traces réelles</i>]
+        SIM["⭐ Simulator<br/><i>Scripted ou LLM persona</i>"]
+    end
+
+    subgraph SCENARIO["🎭 Scénarios (simulate)"]
+        PERS[Persona<br/><i>impatient, hostile, vague...</i>]
+        GOAL[Goal + constraints]
+        ADV[Config adversariale<br/><i>injections, edge cases</i>]
+        PERS --> SIM
+        GOAL --> SIM
+        ADV --> SIM
+    end
+
+    subgraph RUNNER["⚙️ Runner"]
+        ADAPT[AgentAdapter<br/><i>ton agent branché ici</i>]
+        MOCK[MockToolbox<br/><i>tools mockés, side effects capturés</i>]
+        LOOP{Boucle de conversation<br/>user turn → agent turn}
+        SIM -->|nextUserTurn| LOOP
+        LOOP --> ADAPT
+        ADAPT --> MOCK
+        MOCK --> LOOP
+    end
+
+    TRAJ[("📊 Trajectory<br/><i>modèle normalisé commun</i>")]
+    LF --> TRAJ
+    OTEL --> TRAJ
+    LOOP -->|"done"| TRAJ
+
+    subgraph VERIFY["✅ Assertion (assert)"]
+        EXPECT["expectTrajectory()<br/>.toCallTool('x').before('y')<br/>.toNeverCallTool('z')<br/>.toCompleteWithin({turns, cost})"]
+    end
+
+    subgraph REPLAY["🔁 Replay"]
+        RE[ReplayEngine<br/><i>rejoue une trace réelle<br/>contre une nouvelle version</i>]
+    end
+
+    TRAJ --> EXPECT
+    TRAJ --> RE
+    RE --> TRAJ
+
+    subgraph OUTPUT["📤 Sorties CI"]
+        HTML[Rapport HTML<br/><i>artefact GitLab/GitHub</i>]
+        DIFF[Diff de trajectoires<br/><i>v1 vs v2 du prompt</i>]
+        EXIT[Exit code<br/><i>fail la pipeline si régression</i>]
+    end
+
+    EXPECT --> HTML
+    EXPECT --> DIFF
+    EXPECT --> EXIT
+
+    subgraph PAID["💰 Couche payante (hébergée, hors lib)"]
+        BANK[Banque de scénarios<br/>maintenue]
+        GEN[Génération de personas<br/>depuis traces réelles]
+        DASH[Dashboard équipe<br/>historique + alerting régression]
+    end
+
+    BANK -.->|alimente| SCENARIO
+    LF -.->|traces échouées| GEN
+    GEN -.->|nouveaux scénarios| SCENARIO
+    HTML -.->|upload optionnel| DASH
+
+    style SIM fill:#f9e79f,stroke:#b7950b
+    style PAID fill:#fadbd8,stroke:#c0392b
+    style TRAJ fill:#d6eaf8,stroke:#2874a6

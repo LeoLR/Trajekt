@@ -1,0 +1,9 @@
+{
+  "name": "trajekt",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter dashboard dev"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

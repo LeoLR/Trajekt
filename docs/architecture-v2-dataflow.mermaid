@@ -1,0 +1,53 @@
+flowchart TB
+    subgraph AGENT["🤖 Agent de l'utilisateur"]
+        SDK["SDK OTel standard<br/><i>otel-setup.ts, gen_ai.* attributes</i>"]
+    end
+
+    SDK -->|"export OTLP<br/>(HTTP)"| ING
+
+    subgraph INGEST["📥 Ingestion API"]
+        AUTH["Auth par clé projet<br/><i>Authorization: Bearer ...</i>"]
+        NORM["normalize()<br/><i>trajekt/core — INCHANGÉ</i>"]
+        AUTH --> NORM
+    end
+
+    ING[/"POST /v1/traces"/] --> AUTH
+
+    NORM --> DB[("🐘 Postgres<br/><i>table trajectories, JSONB</i>")]
+
+    subgraph API["🔌 API Dashboard"]
+        LIST["GET /api/trajectories<br/><i>liste, pagination, filtres</i>"]
+        DETAIL["GET /api/trajectories/:id<br/><i>détail complet</i>"]
+        STATS["GET /api/stats<br/><i>agrégats, tendances</i>"]
+    end
+
+    DB --> LIST
+    DB --> DETAIL
+    DB --> STATS
+
+    subgraph DASH["🖥️ Dashboard web"]
+        TABLE["Liste des runs<br/><i>triable, filtrable</i>"]
+        VIZ["⭐ Vue trajectoire<br/><i>= le visualiseur déjà construit</i>"]
+        CMP["Comparaison de runs<br/><i>diff visuel — phase 3</i>"]
+        HEADER["Header stats<br/><i>coût total, tendances</i>"]
+    end
+
+    LIST --> TABLE
+    DETAIL --> VIZ
+    STATS --> HEADER
+    TABLE -->|"clic sur un run"| VIZ
+    VIZ -.->|"phase 3"| CMP
+
+    subgraph CI["✅ CI / testing (phase 4, secondaire)"]
+        ASSERT["expectTrajectory()<br/><i>consomme les mêmes Trajectory</i>"]
+        ANNOT["Annotations pass/fail<br/><i>poussées vers le dashboard</i>"]
+        ASSERT --> ANNOT
+    end
+
+    DB -.->|"fetchTrajectory()"| ASSERT
+    ANNOT -.-> DASH
+
+    style VIZ fill:#f9e79f,stroke:#b7950b
+    style DB fill:#d6eaf8,stroke:#2874a6
+    style NORM fill:#d6eaf8,stroke:#2874a6
+    style CI fill:#eaeaea,stroke:#888,stroke-dasharray: 4 3

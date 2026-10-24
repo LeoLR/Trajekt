@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: trajekt
+      POSTGRES_PASSWORD: trajekt
+      POSTGRES_DB: trajekt
+    ports:
+      - "5432:5432"
+    volumes:
+      - trajekt_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trajekt"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dashboard:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://trajekt:trajekt@postgres:5432/trajekt
+      DASHBOARD_SESSION_SECRET: ${DASHBOARD_SESSION_SECRET:-change-moi-en-dev}
+    ports:
+      - "3000:3000"
+
+volumes:
+  trajekt_pgdata:
+
+# Un seul Postgres, deux services au total — volontairement, c'est
+# le contraste avec la stack à 4 services de Langfuse (Postgres +
+# ClickHouse + Redis + S3) dont on avait chiffré le coût ops.

@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.next/
+.env
+*.tsbuildinfo
+apps/dashboard/drizzle/meta/_journal.json.bak
+.pglite/

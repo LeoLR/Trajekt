@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 320" width="960" height="320">
+  <!-- Trajekt — Final, fond clair
+       Même construction que la version sombre : mot monoline encre,
+       demi-flèche ambre foncé (ajusté pour le contraste sur fond clair). -->
+
+  <rect x="0" y="0" width="960" height="320" rx="40" fill="#F4F2ED"/>
+
+  <g stroke="#14161C" stroke-width="25" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M 150 80 L 150 176 Q 150 200 176 200"/>
+    <path d="M 114 112 L 190 112"/>
+    <path d="M 234 112 L 234 200"/>
+    <path d="M 234 162 Q 234 114 284 114"/>
+    <circle cx="352" cy="156" r="44"/>
+    <path d="M 396 112 L 396 200"/>
+    <path d="M 470 112 L 470 224 Q 470 256 440 256"/>
+    <path d="M 526 152 L 608 152"/>
+    <path d="M 608 152 A 42 44 0 1 0 596 194"/>
+    <path d="M 656 80 L 656 200"/>
+    <path d="M 660 150 L 716 200"/>
+    <path d="M 660 150 L 716 100"/>
+    <path d="M 804 80 L 804 176 Q 804 200 830 200"/>
+    <path d="M 768 112 L 844 112"/>
+  </g>
+
+  <circle cx="470" cy="78" r="14" fill="#14161C"/>
+
+  <!-- Demi-flèche : ambre légèrement assombri pour le contraste -->
+  <g stroke="#E89B0C" stroke-width="18" stroke-linecap="round"
+     stroke-linejoin="round" fill="none">
+    <path d="M 118 278 L 842 278"/>
+    <path d="M 842 278 L 798 310"/>
+  </g>
+</svg>

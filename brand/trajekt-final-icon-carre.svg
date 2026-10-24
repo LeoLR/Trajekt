@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Trajekt — Icône finale
+       L'initiale "t" en monoline blanc, soulignée par la demi-flèche
+       ambre, barbillon bas. Même grammaire exacte que le wordmark,
+       lisible en favicon 16px : deux traits + un harpon. -->
+
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="#14161C"/>
+
+  <!-- Le t -->
+  <g stroke="#E8E6E1" stroke-width="46" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M 240 108 L 240 288 Q 240 336 290 336"/>
+    <path d="M 168 172 L 316 172"/>
+  </g>
+
+  <!-- La demi-flèche -->
+  <g stroke="#FFB224" stroke-width="34" stroke-linecap="round"
+     stroke-linejoin="round" fill="none">
+    <path d="M 116 414 L 396 414"/>
+    <path d="M 396 414 L 330 462"/>
+  </g>
+</svg>
