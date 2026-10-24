@@ -1,7 +1,6 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
       "@trajekt/core": [
         "../../packages/core/src/index.ts"

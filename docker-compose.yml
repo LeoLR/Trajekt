@@ -22,13 +22,19 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://trajekt:trajekt@postgres:5432/trajekt
-      DASHBOARD_SESSION_SECRET: ${DASHBOARD_SESSION_SECRET:-change-moi-en-dev}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-trajekt}
+      DASHBOARD_SESSION_SECRET: ${DASHBOARD_SESSION_SECRET:-dev-only-secret-change-me-please}
+      CRON_SECRET: ${CRON_SECRET:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      TRAJEKT_PUBLIC_URL: ${TRAJEKT_PUBLIC_URL:-http://localhost:3000}
+      TRAJEKT_PRICING: ${TRAJEKT_PRICING:-}
     ports:
+      # Dashboard ET ingestion OTLP/HTTP (POST /v1/traces) sur le même port.
       - "3000:3000"
 
 volumes:
   trajekt_pgdata:
 
-# Un seul Postgres, deux services au total — volontairement, c'est
-# le contraste avec la stack à 4 services de Langfuse (Postgres +
-# ClickHouse + Redis + S3) dont on avait chiffré le coût ops.
+# Un seul Postgres, deux services au total — volontairement : c'est le
+# contraste avec la stack à 4 services de Langfuse v3 (Postgres +
+# ClickHouse + Redis + S3).

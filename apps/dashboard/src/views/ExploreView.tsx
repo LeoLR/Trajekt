@@ -45,12 +45,12 @@ export function ExploreView() {
       </div>
       <label
         className={`dropzone${drag ? ' drag' : ''}`}
-        onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+        onDragOver={(e: { preventDefault(): void }) => { e.preventDefault(); setDrag(true); }}
         onDragLeave={() => setDrag(false)}
-        onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files?.[0]; if (f) load(f); }}
+        onDrop={(e: { preventDefault(): void; dataTransfer: DataTransfer }) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files?.[0]; if (f) load(f); }}
         style={{ display: 'block', cursor: 'pointer' }}
       >
-        <input type="file" accept="application/json,.json" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; if (f) load(f); }} />
+        <input type="file" accept="application/json,.json" className="sr-only" onChange={(e: { target: HTMLInputElement }) => { const f = e.target.files?.[0]; if (f) load(f); }} />
         <strong style={{ color: 'var(--text)' }}>Drop a JSON trace here, or click to choose a file</strong>
         <div className="faint" style={{ marginTop: 4, fontSize: 13 }}>Langfuse trace export · OTLP/JSON · Vercel AI SDK result · Trajekt trajectory</div>
       </label>

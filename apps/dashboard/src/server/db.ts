@@ -12,6 +12,7 @@
  */
 
 import postgres from 'postgres';
+import { setPricing } from '@trajekt/core';
 
 export interface Db {
   query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]>;
@@ -28,7 +29,11 @@ function serialize(v: unknown): unknown {
 function wrap(sql: postgres.Sql | postgres.TransactionSql, inTx = false): Db {
   return {
     query: <T>(text: string, params: unknown[] = []) =>
-      sql.unsafe(text, params.map(serialize) as postgres.ParameterOrJSON<never>[]) as unknown as Promise<T[]>,
+      // Sans paramètre : protocole "simple", qui accepte plusieurs
+      // instructions (fichiers de migration).
+      (params.length === 0
+        ? sql.unsafe(text).simple()
+        : sql.unsafe(text, params.map(serialize) as postgres.ParameterOrJSON<never>[])) as unknown as Promise<T[]>,
     transaction: <T>(fn: (tx: Db) => Promise<T>) =>
       inTx
         ? fn(wrap(sql, true))
@@ -44,5 +49,7 @@ export function getDb(): Db {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL manquant — voir .env.example');
   instance = wrap(postgres(url, { max: 10, onnotice: () => {} }));
+  // Surcharge de la table de prix (estimation du coût des spans OTel).
+  if (process.env.TRAJEKT_PRICING) setPricing(JSON.parse(process.env.TRAJEKT_PRICING));
   return instance;
 }

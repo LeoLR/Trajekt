@@ -7,24 +7,27 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "create-project": "tsx scripts/create-project.ts"
+    "migrate": "tsx scripts/migrate.ts",
+    "create-project": "tsx scripts/create-project.ts",
+    "seed": "tsx scripts/seed.ts",
+    "check-regressions": "tsx scripts/check-regressions.ts",
+    "test": "tsx --tsconfig tsconfig.test.json --test test/*.test.ts",
+    "preview": "tsx --tsconfig tsconfig.test.json scripts/preview.tsx preview",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@trajekt/core": "workspace:*",
-    "next": "^15.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "drizzle-orm": "^0.36.0",
-    "postgres": "^3.4.0"
+    "next": "^15.5.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "postgres": "^3.4.7",
+    "tsx": "^4.20.0",
+    "dotenv": "^16.6.0"
   },
   "devDependencies": {
-    "typescript": "^5.5.0",
+    "typescript": "^5.9.0",
     "@types/node": "^22.0.0",
-    "@types/react": "^19.0.0",
-    "drizzle-kit": "^0.28.0",
-    "tsx": "^4.19.0",
-    "dotenv": "^16.4.0"
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0"
   }
 }

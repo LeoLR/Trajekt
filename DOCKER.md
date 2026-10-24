@@ -1,59 +1,65 @@
-# Lancer trajekt avec Docker
-
-Une alternative au setup manuel du README principal — utile si tu ne
-veux pas installer Postgres ni pnpm en local pour juste tester.
-
-## Setup
+# Lancer Trajekt avec Docker
 
 ```bash
-cp .env.example .env
-# Remplir DASHBOARD_SESSION_SECRET avec une chaîne aléatoire longue
-
-docker compose up --build
+cp .env.example .env   # au minimum : DASHBOARD_PASSWORD et DASHBOARD_SESSION_SECRET
+docker compose up -d --build
 ```
 
-Ça lance deux services, pas plus : Postgres et le dashboard. C'est
-volontairement minimal — voir la note dans `docker-compose.yml`.
+Deux services, pas plus : Postgres et le dashboard. Les migrations sont
+appliquées au démarrage du conteneur.
 
-## Migrations et création du projet
+Le dashboard est sur http://localhost:3000, et l'ingestion OTLP/HTTP
+écoute sur le même port (`POST /v1/traces`).
 
-Les migrations sont générées en local (elles doivent être commitées),
-mais appliquées dans le conteneur :
+## Premier projet
 
 ```bash
-# En local, une seule fois (ou à chaque changement de schema.ts) :
-cd apps/dashboard && pnpm db:generate && cd ../..
-
-# Contre la base du conteneur :
-docker compose run --rm dashboard pnpm db:migrate
-
-# Créer le premier projet et récupérer la clé API :
-docker compose run --rm dashboard pnpm create-project "sentry-jira-agent"
+docker compose exec dashboard pnpm create-project my-project   # affiche la clé API une seule fois
+docker compose exec dashboard pnpm seed                        # optionnel : 2 semaines de données de démo
 ```
 
-## Tester
+## Envoyer des traces
+
+N'importe quel exporter OpenTelemetry, en JSON :
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:3000
+OTEL_EXPORTER_OTLP_PROTOCOL=http/json
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer tk_live_..."
+```
+
+Ou un export Langfuse / un résultat Vercel AI SDK posté tel quel :
 
 ```bash
 curl -X POST http://localhost:3000/v1/traces \
-  -H "Authorization: Bearer tk_live_XXXXXXXX" \
+  -H "Authorization: Bearer tk_live_..." \
   -H "Content-Type: application/json" \
-  -d '{ "resourceSpans": [{ "scopeSpans": [{ "spans": [{
-        "traceId": "test-001", "name": "chat",
-        "startTimeUnixNano": "1752480000000000000",
-        "endTimeUnixNano": "1752480002000000000",
-        "attributes": [{ "key": "gen_ai.request.model", "value": { "stringValue": "claude-sonnet-4-6" } }]
-      }] }] }] }'
+  -H "X-Trajekt-Agent: my-agent" \
+  --data @trace.json
 ```
+
+## Détection de régression
+
+Lancer le check périodiquement (toutes les heures, par exemple) :
+
+```bash
+# depuis l'hôte
+curl -X POST http://localhost:3000/api/alerts/check -H "Authorization: Bearer $CRON_SECRET"
+# ou dans le conteneur
+docker compose exec dashboard pnpm check-regressions
+```
+
+Avec `SLACK_WEBHOOK_URL` renseigné, chaque nouvelle régression est
+postée sur Slack (une seule fois par agent et par métrique sur 24 h).
 
 ## Arrêter / repartir de zéro
 
 ```bash
-docker compose down          # garde les données Postgres (volume)
-docker compose down -v       # supprime aussi le volume — base vide au prochain up
+docker compose down          # garde les données (volume)
+docker compose down -v       # supprime aussi le volume
 ```
 
 ## Pas encore fait
 
-Pas de `docker-compose.prod.yml` séparé, pas de reverse proxy/TLS —
-ce setup est pensé pour du dev local ou une validation rapide, pas pour
-exposer directement le port 3000 sur internet.
+Pas de reverse proxy ni de TLS : ce setup vise le dev local ou un
+réseau interne, pas une exposition directe du port 3000 sur internet.

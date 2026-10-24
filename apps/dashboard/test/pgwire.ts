@@ -70,7 +70,7 @@ export class PgWire implements Db {
           reject(e);
         }
       });
-      this.socket.on('data', (d) => {
+      this.socket.on('data', (d: Buffer) => {
         this.buffer = Buffer.concat([this.buffer, d]);
         this.waiter?.();
       });
