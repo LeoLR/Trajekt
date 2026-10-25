@@ -42,3 +42,51 @@ jobs:
             echo "::error::the v2 regression should have failed the suite"; exit 1
           fi
           pnpm exec tsx ../../examples/eval-suite/compare.ts v2 v1
+
+  e2e:
+    # L'application qui tourne vraiment (next build + next start), dans un navigateur.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres@localhost:5432/postgres
+      DASHBOARD_PASSWORD: e2e-password
+      DASHBOARD_SESSION_SECRET: e2e-session-secret-0123456789
+      TRAJEKT_REDACT: secrets,email
+      BASE_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @trajekt/core build
+      - name: Database with the demo data
+        run: |
+          pnpm --filter dashboard migrate
+          pnpm --filter dashboard seed
+      - run: pnpm --filter dashboard build
+      - name: Start the dashboard
+        run: |
+          pnpm --filter dashboard start > /tmp/next.log 2>&1 &
+          for i in $(seq 1 60); do curl -fs -o /dev/null http://localhost:3000/login && exit 0; sleep 1; done
+          cat /tmp/next.log; exit 1
+      - name: Install Playwright
+        working-directory: e2e
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: End-to-end tests
+        working-directory: e2e
+        run: npm test
+      - name: Server log
+        if: failure()
+        run: tail -200 /tmp/next.log

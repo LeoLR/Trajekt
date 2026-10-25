@@ -1,0 +1,12 @@
+{
+  "name": "trajekt-e2e",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end tests of the running dashboard (next start + Postgres). Not part of the pnpm workspace.",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 app.test.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}
