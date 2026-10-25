@@ -1,6 +1,6 @@
 /** Mise en forme partagée par l'interface et les alertes Slack. */
 
-import type { MetricKey } from '@trajekt/core';
+import type { MetricKey, TrajectoryStep } from '@trajekt/core';
 
 export function formatDuration(ms: number | null | undefined): string {
   if (ms == null) return '—';
@@ -68,4 +68,16 @@ export function formatRelativeTime(isoDate: string, now = new Date()): string {
 
 export function shortId(id: string): string {
   return id.replace(/-/g, '').slice(0, 8);
+}
+
+/** Libellé court d'un step (nom de l'outil, modèle…). */
+export function stepTitle(s: TrajectoryStep): string {
+  switch (s.type) {
+    case 'llm_call': return s.model ?? 'llm call';
+    case 'tool_call': return s.name;
+    case 'custom': return s.kind;
+    case 'decision': return s.branch;
+    case 'user_message': return 'user';
+    case 'agent_message': return 'agent';
+  }
 }

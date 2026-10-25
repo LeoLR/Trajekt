@@ -1,7 +1,7 @@
 import type { DiffRow, TrajectoryStep } from '@trajekt/core';
 import type { ComparePageData } from '../server/pages';
 import { RunStatus, Shell } from '../components/ui';
-import { stepTitle } from '../components/RunTimeline';
+import { stepTitle } from '../lib/format';
 import { formatCost, formatDuration, shortId } from '../lib/format';
 
 const MARK_STYLE: Record<DiffRow['mark'], { color: string; label: string }> = {

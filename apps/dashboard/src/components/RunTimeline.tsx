@@ -8,7 +8,7 @@
 
 import { useMemo, useState } from 'react';
 import type { StepAnnotation, Trajectory, TrajectoryStep } from '@trajekt/core';
-import { formatCost, formatDuration } from '../lib/format';
+import { formatCost, formatDuration, stepTitle } from '../lib/format';
 
 const TYPE_COLOR: Record<TrajectoryStep['type'], string> = {
   llm_call: '#7AA2F7',
@@ -26,17 +26,6 @@ const TYPE_LABEL: Record<TrajectoryStep['type'], string> = {
   decision: 'Decision',
   custom: 'System',
 };
-
-export function stepTitle(s: TrajectoryStep): string {
-  switch (s.type) {
-    case 'llm_call': return s.model ?? 'llm call';
-    case 'tool_call': return s.name;
-    case 'custom': return s.kind;
-    case 'decision': return s.branch;
-    case 'user_message': return 'user';
-    case 'agent_message': return 'agent';
-  }
-}
 
 interface Placed {
   step: TrajectoryStep;
