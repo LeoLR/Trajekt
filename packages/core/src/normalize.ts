@@ -307,6 +307,14 @@ function otlpFromEntries(entries: OtlpEntry[]): Trajectory {
           attrs['ai.usage.completionTokens'] ?? attrs['ai.usage.outputTokens'] ??
           attrs['llm.token_count.completion'],
       );
+      const cacheRead = num(
+        attrs['gen_ai.usage.cache_read.input_tokens'] ?? attrs['gen_ai.usage.cache_read_input_tokens'] ??
+          attrs['llm.token_count.prompt_details.cache_read'],
+      );
+      const cacheWrite = num(
+        attrs['gen_ai.usage.cache_creation.input_tokens'] ?? attrs['gen_ai.usage.cache_creation_input_tokens'] ??
+          attrs['llm.token_count.prompt_details.cache_write'],
+      );
       // Messages : conventions GenAI récentes (gen_ai.input/output.messages)
       // et Vercel AI SDK (ai.prompt.messages, ai.response.text). Présents
       // seulement si l'instrumentation capture le contenu.
@@ -329,7 +337,11 @@ function otlpFromEntries(entries: OtlpEntry[]): Trajectory {
         output: text ? { role: 'assistant' as const, content: text.slice(0, 8000) } : undefined,
         usage:
           inputTokens !== undefined || outputTokens !== undefined
-            ? { inputTokens, outputTokens }
+            ? {
+                inputTokens, outputTokens,
+                ...(cacheRead !== undefined ? { cacheReadTokens: cacheRead } : {}),
+                ...(cacheWrite !== undefined ? { cacheWriteTokens: cacheWrite } : {}),
+              }
             : undefined,
         costUsd: num(attrs['gen_ai.usage.cost'] ?? attrs['trajekt.cost_usd'] ?? attrs['llm.cost.total']),
         error,

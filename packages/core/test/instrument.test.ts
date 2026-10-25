@@ -59,3 +59,42 @@ test('traceRun / traceTool : ce que Trajekt lit, sans dépendance', async () => 
   await assert.rejects(traceRun(failing.tracer, { agent: 'a' }, async () => { throw new Error('boom'); }), /boom/);
   assert.equal(computeMetrics(normalize(failing.payload())).status, 'error');
 });
+
+test('traceAnthropic : modèle, tokens avec cache, coût, messages ; le reste du client intact', async () => {
+  const { traceAnthropic, traceRun: tr } = await import('../src/index.js');
+  const { tracer, payload } = fakeTracer();
+  const fakeClient = {
+    apiKey: 'sk-ant',
+    messages: {
+      calls: 0,
+      async create(params: any) {
+        this.calls++;
+        return {
+          model: params.model, stop_reason: 'tool_use',
+          content: [{ type: 'text', text: 'Looking it up.' }, { type: 'tool_use', name: 'sentry.getIssue', input: { id: 'PAY-1' } }],
+          usage: { input_tokens: 1000, output_tokens: 200, cache_read_input_tokens: 9000, cache_creation_input_tokens: 0 },
+        };
+      },
+      countTokens: () => 42,
+    },
+  };
+  const anthropic = traceAnthropic(fakeClient, tracer);
+  await tr(tracer, { agent: 'sentry-triage' }, async () => {
+    const msg = await anthropic.messages.create({ model: 'claude-sonnet-5-5', system: 'You triage.', messages: [{ role: 'user', content: 'PAY-1' }], max_tokens: 500 });
+    assert.equal(msg.stop_reason, 'tool_use');
+  });
+  assert.equal(anthropic.apiKey, 'sk-ant');
+  assert.equal(anthropic.messages.countTokens(), 42);
+  assert.equal(fakeClient.messages.calls, 1);
+  const t = normalize(payload());
+  const llm = t.steps.find((s) => s.type === 'llm_call') as any;
+  assert.equal(llm.model, 'claude-sonnet-5-5');
+  assert.deepEqual(llm.usage, { inputTokens: 1000, outputTokens: 200, cacheReadTokens: 9000, cacheWriteTokens: 0 });
+  assert.deepEqual(llm.input.map((m: any) => m.role), ['system', 'user']);
+  assert.match(llm.output.content, /Looking it up/);
+  const m = computeMetrics(t);
+  assert.equal(m.inputTokens, 10_000, 'le prompt complet, cache compris');
+  // 1000 × 2 $ + 200 × 10 $ + 9000 × 0,10 $ (lecture du cache) par million = 0,0049 $
+  assert.equal(m.costUsd, 0.0049);
+  assert.equal(m.costEstimated, true);
+});

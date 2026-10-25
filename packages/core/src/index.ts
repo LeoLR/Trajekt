@@ -129,6 +129,9 @@ export {
 export {
   traceRun,
   traceTool,
+  traceLlm,
+  traceAnthropic,
+  type LlmCallInfo,
   runAttributes,
   type RunLabels,
   type RunHandle,

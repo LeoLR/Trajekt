@@ -23,6 +23,7 @@ The engine behind Trajekt: read any agent trace into one model, then measure it.
 **Instrument an agent**
 
 - **`traceRun(tracer, labels, fn)` / `traceTool(tracer, name, args, fn)`** — the spans and attributes Trajekt reads (agent, versions, scenario, scores, tool arguments and results), with any OpenTelemetry tracer. No dependency.
+- **`traceAnthropic(client, tracer)`** — wraps an Anthropic SDK client: every `messages.create` records the model, tokens (prompt cache included, priced as such) and messages. `traceLlm(tracer, { model, input }, fn)` does the same around any Anthropic or OpenAI call.
 
 ```bash
 npm i @trajekt/core

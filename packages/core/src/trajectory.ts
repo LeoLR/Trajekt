@@ -20,9 +20,14 @@ export type TrajectorySource =
   | 'simulation'; // conversation générée par un Simulator
 
 export interface TokenUsage {
+  /** Tokens d'entrée facturés au plein tarif (hors cache). */
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  /** Tokens d'entrée lus depuis le cache de prompt (tarif réduit). */
+  cacheReadTokens?: number;
+  /** Tokens d'entrée écrits dans le cache de prompt (tarif majoré). */
+  cacheWriteTokens?: number;
 }
 
 export interface Message {

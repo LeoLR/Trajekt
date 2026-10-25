@@ -206,6 +206,17 @@ await traceRun(tracer, { agent: 'sentry-triage', agentVersion: '1.5.0', promptVe
 });
 `}</Code>
           <p>
+            Calls to the model: wrap the Anthropic client once and every <C>messages.create</C> is recorded — model, tokens including the prompt cache (priced as such), stop reason, and the messages unless <C>{'{ captureContent: false }'}</C>. Other SDKs: <C>traceLlm(tracer, {'{ model, input }'}, () => call())</C> reads Anthropic and OpenAI responses.
+          </p>
+          <Code lang="ts">{`
+import Anthropic from '@anthropic-ai/sdk';
+import { traceAnthropic } from '@trajekt/core';
+
+const anthropic = traceAnthropic(new Anthropic(), tracer);
+// unchanged agent code:
+const msg = await anthropic.messages.create({ model: 'claude-sonnet-5-5', max_tokens: 1024, system, messages, tools });
+`}</Code>
+          <p>
             <C>traceRun</C> also takes <C>appVersion</C>, <C>environment</C> and <C>scenario</C> (for <a href="#eval-suites">eval runs</a>), and exposes <C>run.traceId</C> to attach a score later. An exception that escapes the run marks it as failed; one thrown by a tool marks only that step.
           </p>
 
@@ -468,7 +479,7 @@ docker compose exec dashboard pnpm create-read-key claude-desktop
                 <tr><td><C>diffTrajectories(a, b)</C></td><td>Rows aligned step by step, marked <C>=</C> <C>≠</C> <C>+</C> <C>−</C>, with counts.</td></tr>
                 <tr><td><C>compareWindows(baseline, current)</C></td><td>One verdict per metric: <C>regression</C>, <C>improvement</C>, <C>stable</C> or <C>insufficient</C>.</td></tr>
                 <tr><td><C>decodeOtlpProtobuf(bytes)</C></td><td>An OTLP protobuf request → its OTLP/JSON form, ready for <C>normalize</C>. No dependency.</td></tr>
-                <tr><td><C>traceRun(tracer, labels, fn)</C>, <C>traceTool(tracer, name, args, fn)</C></td><td>The spans Trajekt reads, with any OpenTelemetry tracer. See <a href="#send-helpers">Instrument your code</a>.</td></tr>
+                <tr><td><C>traceRun</C>, <C>traceTool</C>, <C>traceLlm</C>, <C>traceAnthropic(client, tracer)</C></td><td>The spans Trajekt reads, with any OpenTelemetry tracer; the Anthropic client wrapper records every model call. See <a href="#send-helpers">Instrument your code</a>.</td></tr>
                 <tr><td><C>scoreTrajectory(run, expectations)</C></td><td>The share of expectations met, to send as a quality score.</td></tr>
                 <tr><td><C>setMutatingTools(rule)</C></td><td>Which tools change state (a regex, a list of names or a function), for repeated-call detection.</td></tr>
                 <tr><td><C>assertTrajectory(run, expectations)</C></td><td>Throws a readable error listing every unmet expectation (tools called, order, arguments, budgets). <C>checkTrajectory</C> returns the list instead.</td></tr>
@@ -479,7 +490,7 @@ docker compose exec dashboard pnpm create-read-key claude-desktop
             </table>
           </div>
           <p>
-            <strong id="pricing">Cost estimation.</strong> Spans rarely carry a cost, so it is estimated from tokens with a table of indicative public prices for common Anthropic, OpenAI, Google and Mistral models. The longest matching model prefix wins; an unknown model gets no estimate rather than a wrong one. Prices change: override them.
+            <strong id="pricing">Cost estimation.</strong> Spans rarely carry a cost, so it is estimated from tokens with a table of indicative public prices for common Anthropic (including Claude 5.x), OpenAI, Google and Mistral models. Prompt-cache reads and writes are priced separately when the spans report them. The longest matching model prefix wins; an unknown model gets no estimate rather than a wrong one. Prices change: override them.
           </p>
           <Code lang="ts">{`
 import { setPricing } from '@trajekt/core';

@@ -202,7 +202,8 @@ export function computeMetrics(t: Trajectory): RunMetrics {
   const modelCounts = new Map<string, number>();
 
   for (const s of llm) {
-    const inT = s.usage?.inputTokens ?? 0;
+    // Le prompt compte en entier, cache compris ; le coût, lui, distingue le cache.
+    const inT = (s.usage?.inputTokens ?? 0) + (s.usage?.cacheReadTokens ?? 0) + (s.usage?.cacheWriteTokens ?? 0);
     const outT = s.usage?.outputTokens ?? 0;
     inputTokens += inT;
     outputTokens += outT;
@@ -211,7 +212,9 @@ export function computeMetrics(t: Trajectory): RunMetrics {
       cost += s.costUsd;
       costKnown = true;
     } else {
-      const est = estimateCostUsd(s.model, s.usage?.inputTokens, s.usage?.outputTokens);
+      const est = estimateCostUsd(s.model, s.usage?.inputTokens, s.usage?.outputTokens, {
+        readTokens: s.usage?.cacheReadTokens, writeTokens: s.usage?.cacheWriteTokens,
+      });
       if (est !== undefined) {
         cost += est;
         costKnown = true;
