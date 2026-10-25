@@ -177,6 +177,9 @@ pre.code { margin: 0; background: var(--bg); border: 1px solid var(--border); bo
 .dropzone.drag { border-color: var(--amber); background: var(--amber-soft); }
 
 @media (max-width: 640px) {
+  /* Sur mobile, l'en-tête n'est plus collant : sticky + barre défilante
+     horizontale perturbe le défilement vertical sur iOS. */
+  .shell-header { position: static; }
   .shell-header-inner { gap: 10px; padding: 0 16px; }
   .logo-word { display: none; }
   .nav a { padding: 8px 9px; }
