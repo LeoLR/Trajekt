@@ -1,4 +1,4 @@
-// Trajekt eval suite — GitHub Action, sans dépendance (Node 20, fetch natif).
+// Trajekt eval suite — GitHub Action, sans dépendance (Node 24, fetch natif).
 // Appelle GET /api/agents/:agent/evals, écrit le résumé du job, commente la PR
 // et échoue si la suite régresse.
 

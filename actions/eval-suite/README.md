@@ -30,4 +30,4 @@ Outputs: `result` (`pass` or `fail`) and `report-url` (the comparison in the das
 
 The suite fails when a metric regresses across the suite (paired test, at least 8 scenarios), when a scenario starts failing, or when a scenario's quality score drops by 0.5 or more. A new tool path is reported but never fails it. Details: [Testing your agent](https://trajekt-eight.vercel.app/docs/#eval-ci).
 
-No dependency: plain Node 20 and `fetch`.
+No dependency: plain Node 24 and `fetch`.

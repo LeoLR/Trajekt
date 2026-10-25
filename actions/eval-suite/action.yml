@@ -48,5 +48,5 @@ outputs:
     description: Link to the comparison in the Trajekt dashboard.
 
 runs:
-  using: node20
+  using: node24
   main: index.mjs
