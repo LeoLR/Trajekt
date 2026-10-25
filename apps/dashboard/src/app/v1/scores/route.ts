@@ -8,7 +8,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '../../../server/db';
 import { verifyProjectApiKey } from '../../../server/auth';
 import { addScores, parseScore, type ScoreInput } from '../../../server/scores';
-import { apiError } from '../../../lib/errors';
+import { apiError, rateLimited } from '../../../lib/errors';
+import { takeToken } from '../../../lib/ratelimit';
 import { isDemo } from '../../../lib/demo';
 
 export const runtime = 'nodejs';
@@ -18,6 +19,8 @@ export async function POST(req: NextRequest) {
   const db = getDb();
   const project = await verifyProjectApiKey(db, req.headers.get('authorization'));
   if (!project) return apiError('UNAUTHORIZED', 'Missing or invalid project API key.');
+  const token = takeToken(project.id);
+  if (!token.ok) return rateLimited(token.retryAfterSeconds);
   let body: unknown;
   try {
     body = await req.json();

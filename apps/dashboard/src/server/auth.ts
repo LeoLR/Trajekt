@@ -79,10 +79,41 @@ export async function verifyProjectApiKey(
   return project ?? null;
 }
 
-/** Un seul compte = un seul projet affiché : le premier créé. */
+/** Le projet par défaut : le premier créé. */
 export async function getDefaultProject(db: Db): Promise<Project | null> {
   const [project] = await db.query<Project>('select id, name from projects order by created_at limit 1');
   return project ?? null;
+}
+
+/** Le projet choisi dans l'interface (cookie), sinon le projet par défaut. */
+export async function resolveProject(db: Db, selectedId: string | undefined | null): Promise<Project | null> {
+  if (selectedId && /^[0-9a-f-]{36}$/i.test(selectedId)) {
+    const [p] = await db.query<Project>('select id, name from projects where id = $1::uuid', [selectedId]);
+    if (p) return p;
+  }
+  return getDefaultProject(db);
+}
+
+export interface ProjectSummary extends Project {
+  createdAt: string;
+  runs: number;
+  agents: number;
+  lastRun: string | null;
+}
+
+export async function listProjects(db: Db): Promise<ProjectSummary[]> {
+  const rows = await db.query<Record<string, unknown>>(
+    `select p.id, p.name, p.created_at,
+            count(t.id)::int as runs, count(distinct t.agent_name)::int as agents, max(t.started_at) as last_run
+       from projects p left join trajectories t on t.project_id = p.id
+      group by p.id order by p.created_at`,
+  );
+  return rows.map((r) => ({
+    id: String(r.id), name: String(r.name),
+    createdAt: new Date(r.created_at as string).toISOString(),
+    runs: Number(r.runs), agents: Number(r.agents),
+    lastRun: r.last_run ? new Date(r.last_run as string).toISOString() : null,
+  }));
 }
 
 export function passwordMatches(given: string, expected: string): boolean {

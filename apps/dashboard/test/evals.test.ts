@@ -131,3 +131,39 @@ test('scores : en prod, la baisse de qualité de la v1.5.0 ressort ; scores apr�
   assert.equal(parseScore({ traceId: 't', name: 'bad name!', value: 1 }), '"name" must be 1–100 characters: letters, digits, _ . -');
   assert.match(String(parseScore({ name: 'ok', value: 1 })), /traceId/);
 });
+
+test('exploitation : rétention, limite de débit, payloads bruts optionnels, plusieurs projets', async () => {
+  const { purgeOldRuns, retentionDays } = await import('../src/server/maintenance');
+  const { takeToken } = await import('../src/lib/ratelimit');
+  const { createProject: cp, listProjects, resolveProject } = await import('../src/server/auth');
+  const { sentryTriageRun, rng } = await import('../src/server/simulate');
+
+  // Plusieurs projets : chacun ses runs, et le choix par cookie retombe sur le projet par défaut.
+  const other = (await cp(db, 'other')).project;
+  process.env.TRAJEKT_STORE_RAW = 'false';
+  const [payloadA, payloadB] = sentryTriageRun(rng(1), NOW.getTime() - 400 * 86400_000, '1.4.0');
+  await ingestPayload(db, other.id, payloadA);
+  const [run] = await ingestPayload(db, other.id, payloadB);
+  delete process.env.TRAJEKT_STORE_RAW;
+  const [{ steps }] = await db.query<{ steps: unknown }>('select steps::text as steps from trajectories where id = $1', [run.id]);
+  assert.ok(!String(steps).includes('"raw"'), 'payload brut non stocké');
+  const projects = await listProjects(db);
+  assert.deepEqual(projects.map((p) => [p.name, p.runs > 0]), [['demo', true], ['other', true]]);
+  assert.equal((await resolveProject(db, other.id))!.name, 'other');
+  assert.equal((await resolveProject(db, '00000000-0000-0000-0000-000000000000'))!.name, 'demo');
+  assert.equal((await resolveProject(db, 'garbage'))!.name, 'demo');
+
+  // Rétention : seul le run de plus de 365 jours part.
+  assert.equal(retentionDays({}), null);
+  assert.equal(retentionDays({ TRAJEKT_RETENTION_DAYS: '30' }), 30);
+  assert.equal(await purgeOldRuns(db, NOW, null), 0);
+  assert.equal(await purgeOldRuns(db, NOW, 365), 1);
+  assert.equal((await db.query('select 1 from trajectories where id = $1', [run.id])).length, 0);
+
+  // Débit : 3 par minute, puis 429 avec un délai, puis une nouvelle fenêtre.
+  const t0 = 1_000_000;
+  assert.ok(takeToken('p', 3, t0).ok && takeToken('p', 3, t0 + 1).ok && takeToken('p', 3, t0 + 2).ok);
+  const blocked = takeToken('p', 3, t0 + 30_000);
+  assert.deepEqual(blocked, { ok: false, retryAfterSeconds: 30 });
+  assert.ok(takeToken('p', 3, t0 + 60_000).ok);
+});

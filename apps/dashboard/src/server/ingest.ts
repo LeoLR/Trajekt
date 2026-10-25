@@ -201,7 +201,11 @@ export async function ingestPayload(
   raw: unknown,
   defaults: IdentityDefaults = {},
 ): Promise<IngestedRun[]> {
-  const trajectories = normalizeAll(raw).map((t) => applyDefaults(t, defaults));
+  const keepRaw = process.env.TRAJEKT_STORE_RAW !== 'false';
+  const trajectories = normalizeAll(raw)
+    .map((t) => applyDefaults(t, defaults))
+    // Sans le payload d'origine de chaque step, un run pèse environ deux fois moins.
+    .map((t) => (keepRaw ? t : { ...t, steps: t.steps.map((step) => { const { raw: _raw, ...rest } = step; return rest as typeof step; }) }));
   const out: IngestedRun[] = [];
   // Séquentiel : un même payload peut contenir deux lots d'une même trace.
   for (const t of trajectories) out.push(await persist(db, projectId, t));

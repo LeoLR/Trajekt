@@ -1,6 +1,7 @@
 /**
- * POST /api/alerts/check — lance la détection de régression et notifie
- * Slack (SLACK_WEBHOOK_URL) pour les nouvelles alertes.
+ * POST /api/alerts/check — lance la détection de régression sur tous les
+ * projets, notifie Slack (SLACK_WEBHOOK_URL) pour les nouvelles alertes,
+ * et purge les runs plus vieux que TRAJEKT_RETENTION_DAYS.
  *
  * Fait pour un cron (Vercel Cron, GitHub Actions, crontab + curl) :
  *   Authorization: Bearer $CRON_SECRET
@@ -9,8 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual, createHash } from 'node:crypto';
 import { getDb } from '../../../../server/db';
-import { getDefaultProject } from '../../../../server/auth';
-import { checkRegressions, slackNotifier } from '../../../../server/alerts';
+import { runMaintenance } from '../../../../server/maintenance';
 import { apiError } from '../../../../lib/errors';
 
 export const runtime = 'nodejs';
@@ -26,20 +26,11 @@ function authorized(header: string | null): boolean {
 async function handle(req: NextRequest) {
   if (!process.env.CRON_SECRET) return apiError('NOT_CONFIGURED', 'Set CRON_SECRET to enable regression checks.');
   if (!authorized(req.headers.get('authorization'))) return apiError('UNAUTHORIZED', 'Invalid cron secret.');
-  const db = getDb();
-  const project = await getDefaultProject(db);
-  if (!project) return apiError('NOT_CONFIGURED', 'No project yet.');
-  const webhook = process.env.SLACK_WEBHOOK_URL;
-  const result = await checkRegressions(db, project.id, {
-    notify: webhook ? slackNotifier(webhook, process.env.TRAJEKT_PUBLIC_URL) : undefined,
+  const { newAlerts, ...summary } = await runMaintenance(getDb(), {
+    webhook: process.env.SLACK_WEBHOOK_URL,
+    publicUrl: process.env.TRAJEKT_PUBLIC_URL,
   });
-  return NextResponse.json({
-    agentsChecked: result.agentsChecked,
-    regressions: result.regressions,
-    alertsCreated: result.alertsCreated.length,
-    suppressedByCooldown: result.suppressedByCooldown,
-    notified: Boolean(webhook) && result.alertsCreated.length > 0,
-  });
+  return NextResponse.json({ ...summary, newAlerts });
 }
 
 export const POST = handle;

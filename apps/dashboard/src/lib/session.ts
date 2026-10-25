@@ -5,6 +5,8 @@
  */
 
 export const SESSION_COOKIE = 'trajekt_session';
+/** Projet affiché dans le dashboard (id, pas un secret : la session reste exigée). */
+export const PROJECT_COOKIE = 'trajekt_project';
 export const SESSION_TTL_SECONDS = 7 * 24 * 3600;
 
 function getSecret(): string {

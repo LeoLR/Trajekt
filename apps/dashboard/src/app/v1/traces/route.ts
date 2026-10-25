@@ -14,7 +14,8 @@ import { UnknownFormatError, decodeOtlpProtobuf } from '@trajekt/core';
 import { getDb } from '../../../server/db';
 import { verifyProjectApiKey } from '../../../server/auth';
 import { ingestPayload } from '../../../server/ingest';
-import { apiError } from '../../../lib/errors';
+import { apiError, rateLimited } from '../../../lib/errors';
+import { maxBodyBytes, takeToken } from '../../../lib/ratelimit';
 import { isDemo } from '../../../lib/demo';
 
 export const runtime = 'nodejs';
@@ -24,6 +25,12 @@ export async function POST(req: NextRequest) {
   const db = getDb();
   const project = await verifyProjectApiKey(db, req.headers.get('authorization'));
   if (!project) return apiError('UNAUTHORIZED', 'Missing or invalid project API key.');
+  const token = takeToken(project.id);
+  if (!token.ok) return rateLimited(token.retryAfterSeconds);
+  const limit = maxBodyBytes();
+  if (Number(req.headers.get('content-length') ?? 0) > limit) {
+    return apiError('PAYLOAD_TOO_LARGE', `Request body over ${limit / 1024 / 1024} MB (TRAJEKT_MAX_BODY_MB). Lower the exporter's batch size.`);
+  }
 
   const contentType = req.headers.get('content-type') ?? '';
   const isProtobuf = contentType.includes('protobuf');
@@ -32,10 +39,14 @@ export async function POST(req: NextRequest) {
   let body: Buffer;
   try {
     body = Buffer.from(await req.arrayBuffer());
-    if (req.headers.get('content-encoding') === 'gzip') body = gunzipSync(body);
-  } catch {
+    if (req.headers.get('content-encoding') === 'gzip') body = gunzipSync(body, { maxOutputLength: limit });
+  } catch (e) {
+    if ((e as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE') {
+      return apiError('PAYLOAD_TOO_LARGE', `Decompressed body over ${limit / 1024 / 1024} MB (TRAJEKT_MAX_BODY_MB).`);
+    }
     return apiError('VALIDATION_ERROR', 'Could not read the request body (bad gzip?).');
   }
+  if (body.byteLength > limit) return apiError('PAYLOAD_TOO_LARGE', `Request body over ${limit / 1024 / 1024} MB (TRAJEKT_MAX_BODY_MB).`);
   if (isProtobuf) {
     try {
       raw = decodeOtlpProtobuf(new Uint8Array(body.buffer, body.byteOffset, body.byteLength));

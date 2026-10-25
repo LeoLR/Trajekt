@@ -22,11 +22,12 @@ export function Logo() {
   );
 }
 
-export function Shell({ active, children }: { active?: 'agents' | 'runs' | 'explore'; children: ReactNode }) {
+export function Shell({ active, children }: { active?: 'agents' | 'runs' | 'explore' | 'projects'; children: ReactNode }) {
   const nav: Array<[typeof active, string, string]> = [
     ['agents', '/', 'Agents'],
     ['runs', '/runs', 'Runs'],
     ['explore', '/explore', 'Open a trace'],
+    ...(isDemo() ? [] : [['projects', '/projects', 'Projects'] as [typeof active, string, string]]),
   ];
   return (
     <>

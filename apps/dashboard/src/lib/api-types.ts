@@ -33,6 +33,7 @@ export type ApiErrorCode =
   | 'NOT_FOUND'
   | 'FORBIDDEN'
   | 'RATE_LIMITED'
+  | 'PAYLOAD_TOO_LARGE'
   | 'NOT_CONFIGURED'
   | 'INTERNAL_ERROR';
 

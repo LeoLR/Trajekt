@@ -1,16 +1,10 @@
-// pnpm check-regressions — même chose que POST /api/alerts/check, depuis un cron système.
+// pnpm check-regressions — même chose que POST /api/alerts/check, depuis un cron système :
+// détection sur tous les projets, notification Slack, purge (TRAJEKT_RETENTION_DAYS).
 import 'dotenv/config';
 import { getDb } from '../src/server/db';
-import { getDefaultProject } from '../src/server/auth';
-import { checkRegressions, slackNotifier } from '../src/server/alerts';
+import { runMaintenance } from '../src/server/maintenance';
 
-const db = getDb();
-const project = await getDefaultProject(db);
-if (!project) throw new Error('No project yet — run pnpm create-project first.');
-const webhook = process.env.SLACK_WEBHOOK_URL;
-const r = await checkRegressions(db, project.id, {
-  notify: webhook ? slackNotifier(webhook, process.env.TRAJEKT_PUBLIC_URL) : undefined,
-});
-console.log(`${r.agentsChecked} agent(s) checked, ${r.regressions} regression(s), ${r.alertsCreated.length} new alert(s), ${r.suppressedByCooldown} under cooldown.`);
-for (const a of r.alertsCreated) console.log(`  ${a.agentName}: ${a.comparison.label} (${a.comparison.severity})`);
+const r = await runMaintenance(getDb(), { webhook: process.env.SLACK_WEBHOOK_URL, publicUrl: process.env.TRAJEKT_PUBLIC_URL });
+console.log(`${r.projects} project(s), ${r.agentsChecked} agent(s) checked, ${r.regressions} regression(s), ${r.alertsCreated} new alert(s), ${r.suppressedByCooldown} under cooldown, ${r.purgedRuns} old run(s) purged.`);
+for (const a of r.newAlerts) console.log(`  ${a.project} / ${a.agent}: ${a.metric} (${a.severity})`);
 process.exit(0);

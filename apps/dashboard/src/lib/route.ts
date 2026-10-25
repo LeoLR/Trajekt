@@ -9,11 +9,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, type Db } from '../server/db';
-import { getDefaultProject, verifyProjectApiKey, type Project } from '../server/auth';
+import { resolveProject, verifyProjectApiKey, type Project } from '../server/auth';
 import { referenceNow } from '../server/clock';
 import { apiError } from './errors';
 import { isDemo } from './demo';
-import { SESSION_COOKIE, isValidSessionToken } from './session';
+import { PROJECT_COOKIE, SESSION_COOKIE, isValidSessionToken } from './session';
 
 export interface RouteContext {
   req: NextRequest;
@@ -33,7 +33,7 @@ export async function authorizeRead(req: NextRequest, db: Db): Promise<Project |
   if (!isDemo() && !(await isValidSessionToken(req.cookies.get(SESSION_COOKIE)?.value))) {
     return apiError('UNAUTHORIZED', 'Session missing or expired. Use a read API key for programmatic access.');
   }
-  const project = await getDefaultProject(db);
+  const project = await resolveProject(db, req.cookies.get(PROJECT_COOKIE)?.value);
   if (!project) return apiError('NOT_CONFIGURED', 'No project yet — run `pnpm create-project`.');
   return project;
 }
