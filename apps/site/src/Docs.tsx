@@ -16,7 +16,7 @@ const SECTIONS: Array<[string, string, Array<[string, string]>?]> = [
   ['regressions', 'Regression alerts'],
   ['ai', 'Ask your agents (MCP)', [['read-keys', 'Read API keys'], ['mcp-tools', 'Tools']]],
   ['library', '@trajekt/core'],
-  ['testing', 'Testing', [['test-agent', 'Test your agent'], ['test-trajekt', 'Test Trajekt itself']]],
+  ['testing', 'Testing your agent', [['test-assert', 'Assert on a run'], ['eval-suites', 'Eval suites'], ['eval-ci', 'In CI'], ['test-trajekt', 'Test Trajekt itself']]],
   ['api', 'API reference'],
   ['troubleshooting', 'Troubleshooting'],
 ];
@@ -235,6 +235,7 @@ curl -X POST http://localhost:3000/v1/traces \\
                 <tr><td>Agent version</td><td><C>trajekt.agent.version</C>, <C>gen_ai.agent.version</C>, <C>ai.telemetry.metadata.agentVersion</C> — otherwise the app version</td><td><C>metadata.agentVersion</C>, <C>version</C>, <C>release</C></td><td><C>X-Trajekt-Agent-Version</C></td></tr>
                 <tr><td>Prompt version</td><td><C>trajekt.prompt.version</C>, <C>gen_ai.prompt.version</C>, <C>ai.telemetry.metadata.promptVersion</C></td><td><C>metadata.promptVersion</C>, generation <C>promptVersion</C></td><td><C>X-Trajekt-Prompt-Version</C></td></tr>
                 <tr><td>Environment</td><td><C>trajekt.environment</C>, <C>deployment.environment.name</C></td><td><C>environment</C></td><td><C>X-Trajekt-Environment</C></td></tr>
+                <tr><td>Scenario</td><td><C>trajekt.scenario</C>, <C>ai.telemetry.metadata.scenario</C> — marks an eval run, see <a href="#eval-suites">Eval suites</a></td><td><C>metadata.scenario</C></td><td><C>X-Trajekt-Scenario</C></td></tr>
               </tbody>
             </table>
           </div>
@@ -254,6 +255,7 @@ curl -X POST http://localhost:3000/v1/traces \\
                 <tr><td><C>/runs</C></td><td>Filter runs by agent, app version, agent version, prompt version, model, status, or "repeated tool calls only".</td></tr>
                 <tr><td><C>/runs/:id</C></td><td>Replay one run on a timeline. Repeated calls (<C>REPEAT #5</C>), retries (<C>ATTEMPT 2</C>) and failures are marked; click a step to see its arguments, result, prompt or output.</td></tr>
                 <tr><td><C>/runs/:id/compare</C></td><td>Align two runs step by step. By default the run is compared with the latest successful run of the previous version; add <C>?with=&lt;run id&gt;</C> to pick another one.</td></tr>
+                <tr><td><C>/agents/:name/evals</C></td><td>Compare two versions on your eval suite, scenario by scenario: PASS or FAIL, what got worse, and a diff per scenario. See <a href="#eval-suites">Eval suites</a>.</td></tr>
                 <tr><td><C>/explore</C></td><td>Open a trace file in the browser without sending it to the server.</td></tr>
               </tbody>
             </table>
@@ -347,8 +349,9 @@ docker compose exec dashboard pnpm create-read-key claude-desktop
                 <tr><td><C>list_agents</C></td><td>Which agents exist, their activity over 24 h, and which ones regressed. The starting point.</td></tr>
                 <tr><td><C>list_versions</C></td><td>App versions, agent versions, prompt versions or models of an agent, with their metrics.</td></tr>
                 <tr><td><C>compare</C></td><td>Is B worse than A? Two values of any dimension, the latest against the previous one, or the last 24 h against the 7 days before — one verdict per metric.</td></tr>
+                <tr><td><C>compare_eval_suite</C></td><td>For eval runs (tagged with a scenario): PASS or FAIL between two versions, the suite-level verdicts, and the scenarios that got worse with what changed.</td></tr>
                 <tr><td><C>get_regressions</C></td><td>Regressions detected now, and the alerts already sent.</td></tr>
-                <tr><td><C>find_runs</C></td><td>Recent runs by agent, status, versions, model, or repeated tool calls.</td></tr>
+                <tr><td><C>find_runs</C></td><td>Recent runs by agent, status, versions, model, scenario, production or eval, or repeated tool calls.</td></tr>
                 <tr><td><C>explain_run</C></td><td>What a run did: tool path, and the steps that failed, were retried or repeated, with their arguments.</td></tr>
                 <tr><td><C>diff_runs</C></td><td>Two runs aligned step by step, and the configuration that changed between them.</td></tr>
               </tbody>
@@ -373,6 +376,8 @@ docker compose exec dashboard pnpm create-read-key claude-desktop
                 <tr><td><C>annotateSteps(run)</C></td><td>Per step: <C>error</C>, <C>attempt</C>, <C>repeatOf</C>.</td></tr>
                 <tr><td><C>diffTrajectories(a, b)</C></td><td>Rows aligned step by step, marked <C>=</C> <C>≠</C> <C>+</C> <C>−</C>, with counts.</td></tr>
                 <tr><td><C>compareWindows(baseline, current)</C></td><td>One verdict per metric: <C>regression</C>, <C>improvement</C>, <C>stable</C> or <C>insufficient</C>.</td></tr>
+                <tr><td><C>assertTrajectory(run, expectations)</C></td><td>Throws a readable error listing every unmet expectation (tools called, order, arguments, budgets). <C>checkTrajectory</C> returns the list instead.</td></tr>
+                <tr><td><C>compareScenarios(a, b)</C></td><td>Eval suite comparison, scenario by scenario: <C>result</C> (<C>pass</C> / <C>fail</C>), <C>reasons</C>, suite-level verdicts and per-scenario changes. <C>scenarioRunOf(run)</C> turns a trajectory into its input.</td></tr>
                 <tr><td><C>mergeTrajectories(a, b)</C></td><td>A run assembled from two partial batches of the same trace.</td></tr>
                 <tr><td><C>setPricing(prices)</C></td><td>Overrides the price table used to estimate cost.</td></tr>
               </tbody>
@@ -390,30 +395,93 @@ TRAJEKT_PRICING={"my-fine-tune":{"input":1.2,"output":4.8}}
 `}</Code>
 
           {/* ------------------------------------------------------------ */}
-          <H2 id="testing">Testing</H2>
-          <H3 id="test-agent">Test your agent's behaviour</H3>
+          <H2 id="testing">Testing your agent</H2>
           <p>
-            Save the trace of a run — an export, or the JSON of <C>/api/runs/:id</C> → <C>trajectory</C> — and assert on what the agent did, not only on its final answer. This works in any test runner.
+            Production tells you an agent got worse after the fact. While you develop it, replay a fixed set of scenarios — mocked tools and data — on every change, and check that nothing regressed before it ships.
+          </p>
+
+          <H3 id="test-assert">Assert on a run</H3>
+          <p>
+            Assert on what the agent did, not only on its final answer. Works with <C>node:test</C>, vitest or jest; the error lists every expectation that failed, with the tool path of the run.
           </p>
           <Code lang="ts" label="triage.test.ts">{`
 import { test } from 'node:test';
-import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { normalize, computeMetrics } from '@trajekt/core';
+import { normalize, assertTrajectory } from '@trajekt/core';
 
-test('sentry-triage does not loop and stays within budget', () => {
-  const run = normalize(JSON.parse(readFileSync('fixtures/triage-run.json', 'utf8')));
-  const m = computeMetrics(run);
-
-  assert.equal(m.status, 'ok');
-  assert.equal(m.redundantToolCalls, 0);
-  assert.ok(m.stepCount <= 12, \`took \${m.stepCount} steps\`);
-  assert.ok((m.costUsd ?? 0) < 0.08, \`cost \${m.costUsd}\`);
-  assert.match(m.pathSignature, /^sentry\\.getIssue → gitlab\\.searchCode → gitlab\\.readFile/);
+test('npe-checkout: opens a PAY ticket, no loop, within budget', () => {
+  const run = normalize(JSON.parse(readFileSync('runs/npe-checkout.json', 'utf8')));
+  assertTrajectory(run, {
+    status: 'ok',
+    order: ['sentry.getIssue', 'gitlab.readFile', 'jira.createIssue'],
+    calledWith: [{ tool: 'jira.createIssue', args: { project: 'PAY' } }],
+    notCalls: ['gitlab.createMergeRequest'],
+    maxRepeatedToolCalls: 0,
+    maxSteps: 12,
+    maxCostUsd: 0.08,
+  });
 });
 `}</Code>
           <p>
-            To check that your instrumentation produces what Trajekt expects, drop an exported trace on the <a href="/#try">Try it</a> section of the home page, or on <C>/explore</C> in your dashboard: nothing is uploaded.
+            Also available: <C>calls</C>, <C>maxCallsPerTool</C>, <C>maxToolCalls</C>, <C>maxFailedToolCalls</C>, <C>maxRetries</C>, <C>maxDurationMs</C>, <C>maxTokens</C>. <C>calledWith</C> matches arguments partially (only the keys you give), and reads arguments serialized as JSON.
+          </p>
+
+          <H3 id="eval-suites">Eval suites</H3>
+          <p>
+            One run is not enough to judge a change: the model is not deterministic. Run each scenario a few times, on each version, and send the runs to Trajekt with a <C>trajekt.scenario</C> attribute:
+          </p>
+          <Code lang="ts" label="eval/run-suite.ts">{`
+import { trace } from '@opentelemetry/api';
+
+for (const scenario of scenarios) {          // e.g. 10–30 mocked Sentry issues
+  for (let i = 0; i < 3; i++) {              // a few repeats per scenario
+    await trace.getTracer('eval').startActiveSpan('invoke_agent sentry-triage', async (span) => {
+      span.setAttributes({
+        'gen_ai.agent.name': 'sentry-triage',
+        'trajekt.scenario': scenario.name,
+        'trajekt.agent.version': process.env.GIT_SHA ?? 'dev',
+        'trajekt.prompt.version': PROMPT_VERSION,
+      });
+      await runAgent(scenario.input, { tools: mockedTools(scenario) });
+      span.end();
+    });
+  }
+}
+`}</Code>
+          <p>
+            Runs with a scenario are <strong>eval runs</strong>: they are kept out of production metrics, trends and alerts, and compared on <C>/agents/:name/evals</C>. Each scenario is compared <em>with itself</em> across the two versions, which is far more sensitive than comparing averages:
+          </p>
+          <ul>
+            <li><strong>Across the suite</strong>: a paired test (Wilcoxon signed-rank, one-sided, p &lt; 0.05) on each metric. Duration, cost, steps and tokens are compared as ratios, so a large scenario does not outweigh a small one. A metric is flagged if the typical change is also +15% or more (+5 points on a rate). It needs at least 5 scenarios.</li>
+            <li><strong>Scenario by scenario</strong>: no statistics with three runs, plain thresholds instead — a scenario that starts failing (e.g. 0/3 → 2/3), +50% duration, cost, steps or tokens, a tool call repeated that was not before, a tool path never seen in the baseline.</li>
+            <li><strong>Result</strong>: <C>fail</C> if a metric regresses across the suite or if a scenario starts failing. A new tool path is shown but never fails the suite.</li>
+          </ul>
+          <p>
+            Each scenario links to a step-by-step diff of the two versions. Compare on any dimension: agent version, prompt version, app version or model.
+          </p>
+
+          <H3 id="eval-ci">In CI</H3>
+          <p>
+            Two ways to turn the suite into a check, depending on whether your CI can reach Trajekt.
+          </p>
+          <Code label="against a Trajekt instance (read key)">{`
+curl -s -H "Authorization: Bearer $TRAJEKT_READ_KEY" \\
+  "$TRAJEKT_URL/api/agents/sentry-triage/evals?dimension=agent&a=$BASE_SHA&b=$GIT_SHA" \\
+  | jq -e '.comparison.result == "pass"' || { echo "eval suite regressed"; exit 1; }
+`}</Code>
+          <Code lang="ts" label="without a server: compare two saved runs of the suite">{`
+import { normalize, scenarioRunOf, compareScenarios } from '@trajekt/core';
+
+const baseline = loadRuns('eval/baseline/').map((t) => scenarioRunOf(normalize(t)));
+const current = loadRuns('eval/current/').map((t) => scenarioRunOf(normalize(t)));
+const r = compareScenarios(baseline, current);
+if (r.result === 'fail') {
+  console.error(r.reasons.join('\\n'));
+  process.exit(1);
+}
+`}</Code>
+          <p>
+            An agent can do the same through MCP with <C>compare_eval_suite</C>: "did my branch make sentry-triage worse?".
           </p>
 
           <H3 id="test-trajekt">Test Trajekt itself</H3>

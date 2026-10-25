@@ -38,6 +38,7 @@ export function AgentView({ data }: { data: AgentPageData }) {
         <div className="row">
           <a className="btn btn-ghost" href={`/runs?agent=${enc}`}>All runs</a>
           <a className="btn btn-ghost" href={`/runs?agent=${enc}&status=error`}>Failed runs</a>
+          {data.evals && <a className="btn btn-ghost" href={`/agents/${enc}/evals`}>Eval suite ({data.evals.scenarios} scenarios)</a>}
         </div>
       </div>
 
@@ -240,7 +241,12 @@ export function RunsTable({ runs, now, showAgent = true }: { runs: AgentPageData
           {runs.map((r) => (
             <tr key={r.id}>
               <td className="mono"><a href={`/runs/${r.id}`}>run_{shortId(r.id)}</a></td>
-              {showAgent && <td className="mono">{r.agentName}</td>}
+              {showAgent && (
+                <td className="mono">
+                  {r.agentName}
+                  {r.scenario && <div className="faint" style={{ fontSize: 11 }}>eval · {r.scenario}</div>}
+                </td>
+              )}
               <td className="mono">
                 {r.agentVersion ?? '—'}
                 {(r.appVersion && r.appVersion !== r.agentVersion) || r.promptVersion ? (

@@ -7,7 +7,9 @@
 - Ingestion: `POST /v1/traces` with an ingestion key (`Authorization: Bearer tk_live_…`). Accepts OTLP/HTTP JSON (OpenTelemetry GenAI semantic conventions, Vercel AI SDK telemetry), Langfuse trace exports, Vercel AI SDK `generateText` results and Trajekt trajectories. Not supported: OTLP protobuf, gRPC.
 - Each run carries an agent name and four comparison dimensions: app version (`service.version`), agent version (`trajekt.agent.version`, defaults to the app version), prompt version (`trajekt.prompt.version`) and model (read from LLM calls).
 - Per-run metrics: status, duration, cost (from the source or estimated from tokens), steps, tool calls, failed tool calls, repeated tool calls (same tool, same arguments as an earlier successful call), retries, tool path.
-- A regression is flagged only when the change is statistically significant (one-sided test, p < 0.01), large enough (+15% on a mean, +3 points on a rate), with at least 20 runs on each side.
+- Eval runs: runs tagged with `trajekt.scenario` come from an eval suite (mocked tools and data, run in dev or CI). They are excluded from production metrics and alerts, and compared scenario by scenario between two versions (paired Wilcoxon test across the suite, p < 0.05, +15% / +5 pts minimum, 5 scenarios minimum; per scenario: starts failing, +50%, new repeated calls, new tool path). Result: pass or fail. `GET /api/agents/:name/evals?dimension=agent&a=&b=` returns it for CI.
+- `@trajekt/core` also provides `assertTrajectory(run, expectations)` for tests (tools called, order, arguments, budgets) and `compareScenarios(a, b)` to compare two suites without a server.
+- In production, a regression is flagged only when the change is statistically significant (one-sided test, p < 0.01), large enough (+15% on a mean, +3 points on a rate), with at least 20 runs on each side.
 
 ## MCP server (read-only)
 
@@ -17,8 +19,9 @@ Tools:
 - `list_agents` — agents, 24 h activity, health, current regressions. Start here.
 - `list_versions(agent, dimension)` — values of app | agent | prompt | model with their metrics.
 - `compare(agent, dimension?, a?, b?, mode?)` — B vs A on eight metrics, one verdict each; without a/b, latest vs previous; mode "window" = last 24 h vs previous 7 days.
+- `compare_eval_suite(agent, dimension?, a?, b?)` — eval runs only: PASS/FAIL between two versions, suite-level verdicts, scenarios that got worse and what changed.
 - `get_regressions(agent?)` — regressions detected now and alerts sent.
-- `find_runs(agent?, status?, app_version?, agent_version?, prompt_version?, model?, repeated_tool_calls_only?, limit?)`
+- `find_runs(agent?, status?, app_version?, agent_version?, prompt_version?, model?, scenario?, kind?, repeated_tool_calls_only?, limit?)` — kind: live (production) or eval
 - `explain_run(run_id)` — tool path and the failed, retried or repeated steps.
 - `diff_runs(run_id, with_run_id?)` — two runs aligned step by step, and the configuration that changed.
 

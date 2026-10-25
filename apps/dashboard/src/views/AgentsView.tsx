@@ -31,7 +31,7 @@ export function AgentsView({ data }: { data: AgentsPageData }) {
         </div>
       </div>
 
-      {data.agents.length === 0 ? <EmptyState /> : (
+      {data.agents.length === 0 ? (data.evals.length === 0 && <EmptyState />) : (
         <div className="grid">
           {data.agents.map(({ agent, health, findings }) => (
             <a key={agent.name} href={`/agents/${encodeURIComponent(agent.name)}`}
@@ -84,6 +84,35 @@ export function AgentsView({ data }: { data: AgentsPageData }) {
             </a>
           ))}
         </div>
+      )}
+
+      {data.evals.length > 0 && (
+        <section className="section">
+          <h2>Eval suites</h2>
+          <div className="panel table-wrap">
+            <table>
+              <thead>
+                <tr><th>Agent</th><th>Latest vs previous</th><th>Result</th><th className="num">Scenarios</th><th>Last run</th></tr>
+              </thead>
+              <tbody>
+                {data.evals.map((e) => (
+                  <tr key={e.name} className={e.result === 'fail' ? 'is-regression' : undefined}>
+                    <td className="mono"><a href={`/agents/${encodeURIComponent(e.name)}/evals`}>{e.name}</a></td>
+                    <td className="mono">{e.b && e.a ? `${e.b} vs ${e.a}` : e.latestVersion ?? '—'}</td>
+                    <td>
+                      {e.result === 'fail' && <span className="chip chip-err" title={e.reasons.join('\n')}>fail</span>}
+                      {e.result === 'pass' && <span className="chip chip-ok">pass</span>}
+                      {e.result === null && <span className="faint">one version so far</span>}
+                      {e.worse > 0 && <span className="faint" style={{ fontSize: 12.5, marginLeft: 8 }}>{e.worse} scenario{e.worse > 1 ? 's' : ''} worse</span>}
+                    </td>
+                    <td className="num">{e.scenarios}</td>
+                    <td className="faint">{formatRelativeTime(e.lastRun, now)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
       {data.alerts.length > 0 && (

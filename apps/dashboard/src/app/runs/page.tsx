@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 type Search = {
   agent?: string; version?: string; appVersion?: string; promptVersion?: string; model?: string;
-  status?: string; loops?: string; cursor?: string;
+  status?: string; loops?: string; cursor?: string; scenario?: string; kind?: string;
 };
 
 export default async function RunsPage({ searchParams }: { searchParams: Promise<Search> }) {
@@ -22,6 +22,8 @@ export default async function RunsPage({ searchParams }: { searchParams: Promise
     appVersion: sp.agent && sp.appVersion ? sp.appVersion : undefined,
     promptVersion: sp.agent && sp.promptVersion ? sp.promptVersion : undefined,
     model: sp.agent && sp.model ? sp.model : undefined,
+    scenario: sp.scenario || undefined,
+    kind: sp.kind === 'live' || sp.kind === 'eval' ? sp.kind : undefined,
     status: sp.status === 'ok' || sp.status === 'error' ? sp.status : undefined,
     loopsOnly: sp.loops === '1',
     cursor: sp.cursor ? decodeCursor(sp.cursor) ?? undefined : undefined,

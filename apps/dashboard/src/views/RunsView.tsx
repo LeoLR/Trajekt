@@ -10,6 +10,12 @@ export function RunsView({ data, now, nextHref }: { data: RunsPageData; now: str
         <div>
           <div className="eyebrow">All agents</div>
           <h1>Runs</h1>
+          {f.scenario && (
+            <div className="row" style={{ marginTop: 6 }}>
+              <span className="chip chip-amber">scenario · {f.scenario}</span>
+              <a className="faint" style={{ fontSize: 12.5 }} href={f.agent ? `/runs?agent=${encodeURIComponent(f.agent)}` : '/runs'}>clear</a>
+            </div>
+          )}
         </div>
       </div>
       {/* Formulaire GET : les filtres vivent dans l'URL, partageables tels quels. */}
@@ -45,6 +51,12 @@ export function RunsView({ data, now, nextHref }: { data: RunsPageData; now: str
             {data.models.map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
         )}
+        <select name="kind" defaultValue={f.kind ?? ''} aria-label="Production or eval runs">
+          <option value="">Production + evals</option>
+          <option value="live">Production only</option>
+          <option value="eval">Eval runs only</option>
+        </select>
+        {f.scenario && <input type="hidden" name="scenario" value={f.scenario} />}
         <select name="status" defaultValue={f.status ?? ''} aria-label="Status">
           <option value="">Any status</option>
           <option value="error">Failed</option>

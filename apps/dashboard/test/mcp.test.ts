@@ -58,11 +58,11 @@ test('protocole : initialize, ping, notifications, lots, méthodes inconnues', a
   assert.equal((await handleMcp({ hello: 1 }, async () => ({ db, projectId, now: NOW })) as any).error.code, -32600);
 });
 
-test('tools/list : 7 outils en lecture seule avec un schéma', async () => {
+test('tools/list : 8 outils en lecture seule avec un schéma', async () => {
   const { tools } = (await call('tools/list')).result;
-  assert.deepEqual(tools.map((t: any) => t.name), ['list_agents', 'list_versions', 'compare', 'get_regressions', 'find_runs', 'explain_run', 'diff_runs']);
+  assert.deepEqual(tools.map((t: any) => t.name), ['list_agents', 'list_versions', 'compare', 'compare_eval_suite', 'get_regressions', 'find_runs', 'explain_run', 'diff_runs']);
   assert.ok(tools.every((t: any) => t.annotations.readOnlyHint === true && t.inputSchema.type === 'object' && t.description.length > 40));
-  assert.equal(TOOLS.length, 7);
+  assert.equal(TOOLS.length, 8);
 });
 
 test('list_agents et get_regressions : la régression de sentry-triage est là, en clair', async () => {

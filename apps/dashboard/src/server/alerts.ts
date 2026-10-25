@@ -48,7 +48,7 @@ export async function checkRegressions(db: Db, projectId: string, o: CheckOption
 
   const agents = await db.query<{ agent_name: string }>(
     `select distinct agent_name from trajectories
-      where project_id = $1 and started_at >= $2::timestamptz and started_at < $3::timestamptz`,
+      where project_id = $1 and scenario is null and started_at >= $2::timestamptz and started_at < $3::timestamptz`,
     [projectId, new Date(now.getTime() - DAY).toISOString(), now.toISOString()],
   );
 

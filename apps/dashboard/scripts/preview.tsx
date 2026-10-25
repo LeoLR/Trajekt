@@ -13,7 +13,9 @@ import type { ReactElement } from 'react';
 import { freshDb } from '../test/setup';
 import { createProject } from '../src/server/auth';
 import { ingestPayload } from '../src/server/ingest';
-import { simulateTraffic } from '../src/server/simulate';
+import { demoPayloads } from '../src/server/simulate';
+import { loadSuitePage } from '../src/server/suites';
+import { EvalView } from '../src/views/EvalView';
 import { checkRegressions } from '../src/server/alerts';
 import { listRuns } from '../src/server/queries';
 import { loadAgentPage, loadAgentsPage, loadRunPage, loadRunsPage } from '../src/server/pages';
@@ -38,7 +40,7 @@ async function main() {
   const ctx = await freshDb();
   try {
     const { project } = await createProject(ctx.db, 'demo');
-    for (const p of simulateTraffic(now.getTime(), { days: 14, runsPerDay: 40, deployDaysAgo: 2 })) {
+    for (const p of demoPayloads(now.getTime())) {
       await ingestPayload(ctx.db, project.id, p.payload);
     }
     await checkRegressions(ctx.db, project.id, { now });
@@ -62,6 +64,10 @@ async function main() {
     await write('compare', <CompareView data={(await loadComparePage(ctx.db, project.id, best.id))!} />);
     const healthy = (await listRuns(ctx.db, project.id, { agent: 'support-bot', limit: 1 })).items[0];
     await write('run-langfuse', <RunView data={(await loadRunPage(ctx.db, project.id, healthy.id))!} />);
+    await write('evals', <EvalView data={(await loadSuitePage(ctx.db, project.id, 'sentry-triage'))!} now={now.toISOString()} />);
+    const evalRun = (await listRuns(ctx.db, project.id, { kind: 'eval', scenario: 'refund-rounding', version: '1.5.0', status: 'error', limit: 1 })).items[0];
+    await write('eval-compare', <CompareView data={(await loadComparePage(ctx.db, project.id, evalRun.id))!} />);
+    await write('runs-eval', <RunsView data={await loadRunsPage(ctx.db, project.id, { agent: 'sentry-triage', kind: 'eval', scenario: 'refund-rounding' })} now={now.toISOString()} nextHref={null} />);
     await write('login', <LoginView error={true} next="/" configured={true} />);
     console.log(`preview written to ${out}/`);
   } finally {

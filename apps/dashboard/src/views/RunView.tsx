@@ -32,6 +32,7 @@ export function RunView({ data }: { data: RunPageData }) {
             {s.promptVersion && <span className="chip">prompt {s.promptVersion}</span>}
             {s.primaryModel && <span className="chip">{s.primaryModel}</span>}
             {s.sourceFormat && <span className="chip">{s.sourceFormat}</span>}
+            {s.scenario && <a className="chip chip-amber" href={`/runs?agent=${encodeURIComponent(s.agentName)}&scenario=${encodeURIComponent(s.scenario)}`}>eval · {s.scenario}</a>}
             <span className="faint mono" style={{ fontSize: 12 }}>{new Date(s.startedAt).toISOString().replace('T', ' ').slice(0, 19)} UTC</span>
           </div>
         </div>

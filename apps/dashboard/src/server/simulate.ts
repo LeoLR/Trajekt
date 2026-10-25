@@ -104,7 +104,7 @@ class RunBuilder {
   }
 }
 
-function otlp(spans: Span[], service: string, version: string) {
+function otlp(spans: Span[], service: string, version: string, environment = 'production') {
   return {
     resourceSpans: [
       {
@@ -112,7 +112,7 @@ function otlp(spans: Span[], service: string, version: string) {
           attributes: [
             { key: 'service.name', value: sv(service) },
             { key: 'service.version', value: sv(version) },
-            { key: 'deployment.environment.name', value: sv('production') },
+            { key: 'deployment.environment.name', value: sv(environment) },
           ],
         },
         scopeSpans: [{ scope: { name: 'trajekt-demo' }, spans }],
@@ -130,6 +130,12 @@ export interface TriageOptions {
   appVersion?: string;
   /** Force le modèle (sinon claude-sonnet-4-5, ou gpt-4.1-mini pour un quart des runs). */
   model?: string;
+  /** Run d'évaluation : scénario fixe (ticket et fichier imposés), environnement ci. */
+  scenario?: { name: string; issue: string; file: string };
+  /** Probabilité qu'une v1.5.0 relance la même recherche (défaut 0.65). */
+  loopChance?: number;
+  /** Probabilité qu'une v1.5.0 tente une MR rejetée (défaut 0.14). */
+  mrFailChance?: number;
 }
 
 export function sentryTriageRun(r: Rand, startMs: number, version: '1.4.0' | '1.5.0', o: TriageOptions = {}): unknown[] {
@@ -139,15 +145,15 @@ export function sentryTriageRun(r: Rand, startMs: number, version: '1.4.0' | '1.
   const model = o.model ?? (r() < 0.25 ? 'gpt-4.1-mini' : 'claude-sonnet-4-5');
   const appVersion = o.appVersion ?? '3.1.0';
   const promptVersion = version === '1.5.0' ? 'v8' : 'v7';
-  const issue = ISSUES[Math.floor(r() * ISSUES.length)];
-  const file = FILES[Math.floor(r() * FILES.length)];
+  const issue = o.scenario?.issue ?? ISSUES[Math.floor(r() * ISSUES.length)];
+  const file = o.scenario?.file ?? FILES[Math.floor(r() * FILES.length)];
 
   b.llm(model, between(r, 1800, 2600), between(r, 150, 300), between(r, 1800, 3200));
   b.tool('sentry.getIssue', { id: issue }, between(r, 250, 500), undefined, { id: issue, count: Math.floor(between(r, 3, 80)) });
   b.llm(model, between(r, 2600, 3400), between(r, 200, 400), between(r, 1500, 2800));
   b.tool('gitlab.searchCode', { query: file, scope: 'blobs' }, between(r, 600, 1100));
 
-  if (regressed && r() < 0.65) {
+  if (regressed && r() < (o.loopChance ?? 0.65)) {
     // La régression : la v1.5 relance la même recherche au lieu de lire le fichier.
     const loops = r() < 0.4 ? 2 : 1;
     for (let i = 0; i < loops; i++) {
@@ -164,7 +170,7 @@ export function sentryTriageRun(r: Rand, startMs: number, version: '1.4.0' | '1.
   b.tool('jira.createIssue', { project: issue.split('-')[0], summary: `Fix ${file}` }, between(r, 400, 900), undefined, { key: `${issue.split('-')[0]}-${Math.floor(between(r, 1000, 2000))}` });
 
   let rootError: string | undefined;
-  if (regressed && r() < 0.14) {
+  if (regressed && r() < (o.mrFailChance ?? 0.14)) {
     b.llm(model, between(r, 5000, 7000), between(r, 600, 900), between(r, 4000, 9000));
     b.tool('gitlab.createMergeRequest', { source: `fix/${issue.toLowerCase()}`, target: 'main' }, between(r, 400, 600), '422 Unprocessable Entity');
     rootError = 'Merge request rejected (422)';
@@ -174,13 +180,16 @@ export function sentryTriageRun(r: Rand, startMs: number, version: '1.4.0' | '1.
   b.tool('slack.postMessage', { channel: '#backend-alerts' }, between(r, 150, 300));
 
   const children = b.spans;
+  const env = o.scenario ? 'ci' : 'production';
+  const rootAttrs: Record<string, string> = {
+    'trajekt.agent.version': version,
+    'trajekt.prompt.version': promptVersion,
+    ...(o.scenario ? { 'trajekt.scenario': o.scenario.name } : {}),
+  };
   const cut = Math.max(1, Math.floor(children.length * between(r, 0.4, 0.8)));
   return [
-    otlp(children.slice(0, cut), 'sentry-triage', appVersion),
-    otlp([...children.slice(cut), b.root('sentry-triage', rootError, {
-      'trajekt.agent.version': version,
-      'trajekt.prompt.version': promptVersion,
-    })], 'sentry-triage', appVersion),
+    otlp(children.slice(0, cut), 'sentry-triage', appVersion, env),
+    otlp([...children.slice(cut), b.root('sentry-triage', rootError, rootAttrs)], 'sentry-triage', appVersion, env),
   ];
 }
 
@@ -234,4 +243,61 @@ export function simulateTraffic(now: number, opts: { days?: number; seed?: numbe
     if (r() < 0.6) out.push({ at: at + 1000, payload: supportBotRun(r, at + 1000) });
   }
   return out;
+}
+
+/**
+ * La suite d'évaluation de sentry-triage : 12 tickets Sentry mockés, joués
+ * 3 fois chacun par version, comme le ferait une CI. La v1.5.0 boucle sur
+ * les tickets dont le fichier est ambigu (recherche à plusieurs résultats)
+ * et se met à échouer sur l'un d'eux : la suite le dit avant la mise en prod.
+ */
+export const EVAL_SCENARIOS: Array<{ name: string; issue: string; file: string; ambiguous: boolean; breaks?: boolean }> = [
+  { name: 'npe-checkout-discount', issue: 'PAY-1432', file: 'checkout/discount.ts', ambiguous: true },
+  { name: 'payment-timeout', issue: 'PAY-1440', file: 'checkout/payment.ts', ambiguous: false },
+  { name: 'refund-rounding', issue: 'PAY-1451', file: 'checkout/refund.ts', ambiguous: true, breaks: true },
+  { name: 'cart-empty-state', issue: 'CHK-219', file: 'checkout/cart.ts', ambiguous: false },
+  { name: 'coupon-expired', issue: 'CHK-233', file: 'checkout/discount.ts', ambiguous: true },
+  { name: 'session-expired-loop', issue: 'AUTH-88', file: 'auth/session.ts', ambiguous: false },
+  { name: 'oauth-callback-500', issue: 'AUTH-95', file: 'auth/oauth.ts', ambiguous: true },
+  { name: 'password-reset-mail', issue: 'AUTH-102', file: 'auth/reset.ts', ambiguous: false },
+  { name: 'search-index-stale', issue: 'SRCH-412', file: 'search/indexer.ts', ambiguous: true },
+  { name: 'search-typo-tolerance', issue: 'SRCH-420', file: 'search/query.ts', ambiguous: false },
+  { name: 'invoice-pdf-blank', issue: 'BILL-77', file: 'billing/invoice.ts', ambiguous: false },
+  { name: 'tax-rate-eu', issue: 'BILL-81', file: 'billing/tax.ts', ambiguous: true },
+];
+
+export function simulateEvalSuite(
+  startMs: number, version: '1.4.0' | '1.5.0', opts: { repeats?: number; seed?: number } = {},
+): SimulatedPayload[] {
+  const out: SimulatedPayload[] = [];
+  const repeats = opts.repeats ?? 3;
+  EVAL_SCENARIOS.forEach((sc, i) => {
+    for (let k = 0; k < repeats; k++) {
+      const r = rng((opts.seed ?? 7) * 1000 + i * 10 + k + (version === '1.5.0' ? 500 : 0));
+      const at = startMs + (i * repeats + k) * 45_000;
+      for (const payload of sentryTriageRun(r, at, version, {
+        appVersion: version === '1.5.0' ? '3.2.0' : '3.1.0',
+        model: 'claude-sonnet-4-5',
+        scenario: sc,
+        loopChance: sc.ambiguous ? 0.95 : 0.05,
+        mrFailChance: sc.breaks ? (k < 2 ? 1 : 0) : 0,
+      })) out.push({ at, payload });
+    }
+  });
+  return out;
+}
+
+/**
+ * Données de la démo : deux semaines de trafic de prod, plus la suite
+ * d'évaluation de sentry-triage jouée en CI avant chaque version — la
+ * v1.4.0 il y a six jours, la v1.5.0 quelques heures avant son déploiement.
+ */
+export function demoPayloads(now: number, opts: { deployDaysAgo?: number } = {}): SimulatedPayload[] {
+  const deployDaysAgo = opts.deployDaysAgo ?? 2;
+  const HOUR = 3600 * 1000;
+  return [
+    ...simulateEvalSuite(now - 6 * 24 * HOUR, '1.4.0'),
+    ...simulateEvalSuite(now - deployDaysAgo * 24 * HOUR - 3 * HOUR, '1.5.0'),
+    ...simulateTraffic(now, { days: 14, runsPerDay: 40, deployDaysAgo }),
+  ].sort((a, b) => a.at - b.at);
 }

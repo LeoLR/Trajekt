@@ -4,7 +4,7 @@ import 'dotenv/config';
 import { getDb } from '../src/server/db';
 import { createProject, getDefaultProject } from '../src/server/auth';
 import { ingestPayload } from '../src/server/ingest';
-import { simulateTraffic } from '../src/server/simulate';
+import { demoPayloads } from '../src/server/simulate';
 import { checkRegressions } from '../src/server/alerts';
 
 const db = getDb();
@@ -14,7 +14,7 @@ if (!project) {
   project = created.project;
   console.log(`Created project "demo" — API key: ${created.apiKey}`);
 }
-const payloads = simulateTraffic(Date.now(), { days: 14, runsPerDay: 40, deployDaysAgo: 2 });
+const payloads = demoPayloads(Date.now());
 let n = 0;
 for (const p of payloads) {
   await ingestPayload(db, project.id, p.payload);

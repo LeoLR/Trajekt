@@ -19,6 +19,7 @@ import {
 } from './queries';
 import { loadAgentsPage, loadComparePage } from './pages';
 import { recentAlerts } from './alerts';
+import { loadSuitePage, suiteValues } from './suites';
 import { formatCost, formatDelta, formatDuration, formatMetric, formatPercent } from '../lib/format';
 
 export const MCP_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
@@ -27,6 +28,7 @@ export const SERVER_INFO = { name: 'trajekt', version: '0.1.0' };
 const INSTRUCTIONS = `Trajekt records the runs of AI agents and compares them over time.
 Start with list_agents to see which agents exist and whether any regressed.
 To answer "did version X make it worse?", use compare with a dimension (app, agent, prompt or model).
+Runs tagged with a scenario come from eval suites (mocked data, dev or CI): use compare_eval_suite for those.
 To explain one run, use find_runs then explain_run. All tools are read-only.
 Numbers are already computed: report them, do not recompute them.`;
 
@@ -110,7 +112,8 @@ function runLine(r: RunSummary): string {
     r.toolErrorCount ? `${r.toolErrorCount} tool error${r.toolErrorCount > 1 ? 's' : ''}` : null,
   ].filter(Boolean);
   const versions = [r.appVersion && r.appVersion !== r.agentVersion ? `app ${r.appVersion}` : null, r.agentVersion ? `agent ${r.agentVersion}` : null, r.promptVersion ? `prompt ${r.promptVersion}` : null, r.primaryModel].filter(Boolean).join(', ');
-  return `- ${r.id} · ${r.startedAt.slice(0, 16).replace('T', ' ')} UTC · ${r.status === 'ok' ? 'ok' : 'FAILED'} · ${formatDuration(r.durationMs)} · ${formatCost(r.costUsd, r.costEstimated)} · ${r.stepCount} steps · ${versions}${flags.length ? ` · ${flags.join(', ')}` : ''}`;
+  const scenario = r.scenario ? ` · scenario ${r.scenario}` : '';
+  return `- ${r.id} · ${r.startedAt.slice(0, 16).replace('T', ' ')} UTC · ${r.status === 'ok' ? 'ok' : 'FAILED'} · ${formatDuration(r.durationMs)} · ${formatCost(r.costUsd, r.costEstimated)} · ${r.stepCount} steps · ${versions}${scenario}${flags.length ? ` · ${flags.join(', ')}` : ''}`;
 }
 
 function stepName(s: TrajectoryStep): string {
@@ -134,7 +137,14 @@ export const TOOLS: Tool[] = [
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     async run(_args, { db, projectId, now }) {
       const page = await loadAgentsPage(db, projectId, now);
-      if (!page.agents.length) return { text: 'No agent has sent runs yet.', data: { agents: [] } };
+      const evalText = page.evals.length
+        ? '\nEval suites (compare_eval_suite):\n' + page.evals.map((e) =>
+            `- ${e.name}: ${e.scenarios} scenarios, ${e.result ? `${e.result.toUpperCase()} — ${e.b} vs ${e.a}` : 'one version evaluated so far'}${e.reasons.length ? ` (${e.reasons.join('; ')})` : ''}`,
+          ).join('\n')
+        : '';
+      if (!page.agents.length) {
+        return { text: (page.evals.length ? 'No production runs yet.' : 'No agent has sent runs yet.') + evalText, data: { agents: [], evalSuites: page.evals } };
+      }
       const data = page.agents.map(({ agent, health, findings }) => ({
         name: agent.name,
         health,
@@ -150,8 +160,8 @@ export const TOOLS: Tool[] = [
         const head = `${agent.name} — ${HEALTH_TEXT[health]}${agent.latestVersion ? `, agent ${agent.latestVersion}` : ''} · last 24 h: ${agent.runs24h} runs, ${formatPercent(agent.errorRate24h)} failed, p50 ${formatDuration(agent.p50DurationMs24h)}, mean cost ${formatCost(agent.avgCostUsd24h)}`;
         const lines = findings.map((f) => `  - ${METRIC_LABELS[f.metric]}: ${formatMetric(f.metric, f.baseline)} → ${formatMetric(f.metric, f.current)} (${f.severity}, ${f.scope})`);
         return [head, ...lines].join('\n');
-      }).join('\n');
-      return { text, data: { now: now.toISOString(), agents: data } };
+      }).join('\n') + evalText;
+      return { text, data: { now: now.toISOString(), agents: data, evalSuites: page.evals } };
     },
   },
   {
@@ -218,6 +228,57 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: 'compare_eval_suite',
+    title: 'Compare eval suites',
+    description: 'For runs tagged with a scenario (an eval suite run on mocked data, in dev or CI): compares two versions scenario by scenario. Returns PASS or FAIL with the reasons, the suite-level verdict on each metric (paired test, works with a handful of scenarios), and the scenarios that got worse with what changed. Without a and b: the latest value against the previous one.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        agent: { type: 'string' },
+        dimension: { type: 'string', enum: DIM_ENUM, description: 'What differs between A and B. Default: agent.' },
+        a: { type: 'string', description: 'Baseline value.' },
+        b: { type: 'string', description: 'Value to evaluate against the baseline.' },
+      },
+      required: ['agent'],
+      additionalProperties: false,
+    },
+    async run(args, { db, projectId }) {
+      const agent = str(args, 'agent', true)!;
+      const dim = dimension(args);
+      const a = str(args, 'a');
+      const b = str(args, 'b');
+      if ((a && !b) || (b && !a)) throw new ToolInputError('Give both "a" and "b", or neither.');
+      const known = (await suiteValues(db, projectId, agent, dim)).map((v) => v.value);
+      for (const v of [a, b]) {
+        if (v && !known.includes(v)) throw new ToolInputError(`No eval run of ${agent} with ${DIM_NAME[dim]} "${v}". Evaluated: ${known.join(', ') || 'none'}.`);
+      }
+      const page = await loadSuitePage(db, projectId, agent, { dimension: dim, a, b });
+      if (!page) throw new ToolInputError(`${agent} has no eval runs (runs tagged with trajekt.scenario).`);
+      const c = page.comparison;
+      if (!c) return { text: `${agent}: only one ${DIM_NAME[dim]} evaluated so far (${known.join(', ') || 'none'}).`, data: page };
+      const worse = c.scenarios.filter((s) => s.verdict === 'regression');
+      const better = c.scenarios.filter((s) => s.verdict === 'improvement');
+      const changeLine = (s: (typeof c.scenarios)[number]) => `  - ${s.scenario}: ` + s.changes.map((ch) =>
+        ch.metric === 'errorRate' || ch.metric === 'newPathShare' ? `${ch.label} (${ch.detail})`
+          : ch.relDelta !== null ? `${ch.label} ${ch.relDelta > 0 ? '+' : ''}${Math.round(ch.relDelta * 100)}%`
+          : `${ch.label} ${formatMetric(ch.metric, ch.baseline)} → ${formatMetric(ch.metric, ch.current)}`,
+      ).join(', ');
+      const text = [
+        `${agent} eval suite — ${DIM_NAME[dim]} ${page.b} vs ${page.a}: ${c.result.toUpperCase()} (${c.paired} scenarios compared)`,
+        ...c.reasons.map((r) => `  reason: ${r}`),
+        'Across the suite:',
+        ...c.metrics.map((m) => `  - ${METRIC_LABELS[m.metric]}: ${m.verdict === 'insufficient' ? `not enough data (${m.detail})` : `${formatMetric(m.metric, m.baseline)} → ${formatMetric(m.metric, m.current)}${m.metric === 'newPathShare' ? '' : ` (${formatDelta(m.metric, m.delta, m.relDelta)})`}, ${m.verdict}${m.severity ? ` (${m.severity})` : ''}`}`),
+        worse.length ? `Scenarios that got worse (${worse.length}):` : 'No scenario got worse.',
+        ...worse.map(changeLine),
+        ...(better.length ? [`Scenarios that got better (${better.length}):`, ...better.map(changeLine)] : []),
+        ...(c.onlyBaseline.length ? [`Only in A, not compared: ${c.onlyBaseline.join(', ')}`] : []),
+        ...(c.onlyCurrent.length ? [`Only in B, not compared: ${c.onlyCurrent.join(', ')}`] : []),
+        'Use find_runs with scenario and agent_version to get run ids, then diff_runs to see where a scenario diverged.',
+      ].join('\n');
+      return { text, data: { agent, dimension: dim, a: page.a, b: page.b, ...c, sampleRuns: page.sampleRuns } };
+    },
+  },
+  {
     name: 'get_regressions',
     title: 'Get regressions',
     description: 'Regressions detected right now (latest versions vs previous ones, last 24 h vs the 7 days before), plus the alerts already sent. Optionally for one agent.',
@@ -264,6 +325,8 @@ export const TOOLS: Tool[] = [
         agent_version: { type: 'string' },
         prompt_version: { type: 'string' },
         model: { type: 'string' },
+        scenario: { type: 'string', description: 'Eval scenario name.' },
+        kind: { type: 'string', enum: ['live', 'eval'], description: 'live: production runs only; eval: eval suite runs only. Default: both.' },
         repeated_tool_calls_only: { type: 'boolean' },
         limit: { type: 'integer', minimum: 1, maximum: 25, description: 'Default 10.' },
       },
@@ -280,6 +343,12 @@ export const TOOLS: Tool[] = [
         version: str(args, 'agent_version'),
         promptVersion: str(args, 'prompt_version'),
         model: str(args, 'model'),
+        scenario: str(args, 'scenario'),
+        kind: (() => {
+          const k = str(args, 'kind');
+          if (k && k !== 'live' && k !== 'eval') throw new ToolInputError('"kind" must be live or eval.');
+          return k as 'live' | 'eval' | undefined;
+        })(),
         loopsOnly: args.repeated_tool_calls_only === true,
         limit,
       });

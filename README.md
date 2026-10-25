@@ -132,6 +132,28 @@ const metrics = computeMetrics(run);     // status, durationMs, costUsd, redunda
 const flags = annotateSteps(run);        // per step: error, retry attempt, "repeats step #n"
 ```
 
+## Test your agent before it ships
+
+Replay a fixed set of scenarios — mocked tools and data — on every change, and let Trajekt tell you whether the new version is worse.
+
+- **Assert on a run** in any test runner:
+
+  ```ts
+  import { normalize, assertTrajectory } from '@trajekt/core';
+
+  assertTrajectory(normalize(trace), {
+    status: 'ok',
+    order: ['sentry.getIssue', 'gitlab.readFile', 'jira.createIssue'],
+    calledWith: [{ tool: 'jira.createIssue', args: { project: 'PAY' } }],
+    maxRepeatedToolCalls: 0,
+    maxCostUsd: 0.08,
+  });
+  ```
+
+- **Compare eval suites.** Tag eval runs with `trajekt.scenario` (and the version under test). Trajekt keeps them out of production metrics and compares each scenario with itself across two versions — a paired test that catches a regression with a dozen scenarios — then says `pass` or `fail`, which scenarios got worse, and links to a step-by-step diff. Gate your CI on `GET /api/agents/:name/evals` or, without a server, on `compareScenarios()` from `@trajekt/core`.
+
+See [Testing your agent](https://trajekt-eight.vercel.app/docs/#testing) in the docs, and the eval suite of the [live demo](https://trajekt-demo.vercel.app/agents/sentry-triage/evals).
+
 ## Works with
 
 | Source | How |

@@ -11,7 +11,7 @@ import { getDb } from '../src/server/db';
 import { migrate } from '../src/server/migrate';
 import { createProject, getDefaultProject } from '../src/server/auth';
 import { ingestPayload } from '../src/server/ingest';
-import { simulateTraffic } from '../src/server/simulate';
+import { demoPayloads } from '../src/server/simulate';
 import { checkRegressions } from '../src/server/alerts';
 
 async function main() {
@@ -32,7 +32,7 @@ async function main() {
 
   // Les lots d'une même trace se suivent dans la liste : on les garde dans
   // l'ordre, et on traite plusieurs traces en parallèle.
-  const payloads = simulateTraffic(Date.now(), { days: 14, runsPerDay: 40, deployDaysAgo: 2 });
+  const payloads = demoPayloads(Date.now());
   const groups: unknown[][] = [];
   let lastAt = NaN;
   for (const p of payloads) {

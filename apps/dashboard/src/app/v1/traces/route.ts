@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
       agentVersion: req.headers.get('x-trajekt-agent-version') ?? undefined,
       promptVersion: req.headers.get('x-trajekt-prompt-version') ?? undefined,
       environment: req.headers.get('x-trajekt-environment') ?? undefined,
+      scenario: req.headers.get('x-trajekt-scenario') ?? undefined,
     });
     if (runs.length === 0) return apiError('VALIDATION_ERROR', 'No usable trace in this payload.');
     return NextResponse.json({ trajectories: runs }, { status: 201 });

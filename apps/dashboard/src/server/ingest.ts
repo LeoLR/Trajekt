@@ -26,6 +26,7 @@ export interface IdentityDefaults {
   agentVersion?: string;
   promptVersion?: string;
   environment?: string;
+  scenario?: string;
 }
 
 export interface IngestedRun {
@@ -34,6 +35,7 @@ export interface IngestedRun {
   agentName: string;
   agentVersion: string | null;
   appVersion: string | null;
+  scenario: string | null;
   sourceFormat: string | null;
   status: 'ok' | 'error';
   stepCount: number;
@@ -69,6 +71,7 @@ function applyDefaults(t: Trajectory, d: IdentityDefaults): Trajectory {
       agentVersion: m.agentVersion || d.agentVersion,
       promptVersion: m.promptVersion || d.promptVersion,
       environment: m.environment || d.environment,
+      scenario: m.scenario ?? (d.scenario ? { name: d.scenario } : undefined),
     },
   };
 }
@@ -138,20 +141,21 @@ async function persist(db: Db, projectId: string, incoming: Trajectory): Promise
       JSON.stringify(trajectory.steps),
       JSON.stringify(meta),
       meta.appVersion ?? null,
+      meta.scenario?.name ?? null,
     ];
 
     const columns = `project_id, trace_id, agent_name, agent_version, prompt_version, environment,
       primary_model, schema_version, source, source_format, status, started_at, duration_ms,
       step_count, llm_call_count, tool_call_count, error_count, tool_error_count,
       input_tokens, output_tokens, cost_usd, cost_estimated, redundant_tool_calls,
-      retry_count, path_signature, steps, metadata, app_version`;
+      retry_count, path_signature, steps, metadata, app_version, scenario`;
     const placeholders = `$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::timestamptz, $13,
-      $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26::text::jsonb, $27::text::jsonb, $28`;
+      $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26::text::jsonb, $27::text::jsonb, $28, $29`;
 
     const [row] = existing
       ? await tx.query<{ id: string; created_at: Date }>(
           `update trajectories set (${columns}, updated_at) = (${placeholders}, now())
-            where id = $29 returning id, created_at`,
+            where id = $30 returning id, created_at`,
           [...values, existing.id],
         )
       : await tx.query<{ id: string; created_at: Date }>(
@@ -165,6 +169,7 @@ async function persist(db: Db, projectId: string, incoming: Trajectory): Promise
       agentName: meta.agentName || UNKNOWN_AGENT,
       agentVersion: meta.agentVersion ?? meta.appVersion ?? null,
       appVersion: meta.appVersion ?? null,
+      scenario: meta.scenario?.name ?? null,
       sourceFormat: meta.sourceFormat ?? null,
       status: m.status,
       stepCount: m.stepCount,

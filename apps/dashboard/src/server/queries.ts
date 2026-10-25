@@ -92,6 +92,8 @@ export interface RunSummary {
   primaryModel: string | null;
   pathSignature: string;
   sourceFormat: string | null;
+  /** Scénario d'évaluation, null pour un run de prod. */
+  scenario: string | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -141,7 +143,7 @@ export async function listAgents(db: Db, projectId: string, now = new Date()): P
               filter (where started_at >= $3::timestamptz)::float8 as p50_24h,
             (avg(cost_usd) filter (where started_at >= $3::timestamptz))::float8 as cost_24h
        from trajectories
-      where project_id = $1 and started_at >= $2::timestamptz
+      where project_id = $1 and scenario is null and started_at >= $2::timestamptz
       group by agent_name
       order by max(started_at) desc`,
     [projectId, since14, since1, since7],
@@ -151,7 +153,7 @@ export async function listAgents(db: Db, projectId: string, now = new Date()): P
   const latest = await db.query<{ agent_name: string; agent_version: string | null }>(
     `select distinct on (agent_name) agent_name, agent_version
        from trajectories
-      where project_id = $1 and started_at >= $2::timestamptz
+      where project_id = $1 and scenario is null and started_at >= $2::timestamptz
       order by agent_name, started_at desc`,
     [projectId, since14],
   );
@@ -164,7 +166,7 @@ export async function listAgents(db: Db, projectId: string, now = new Date()): P
             (count(*) filter (where status = 'error'))::float8 / count(*) as error_rate,
             avg(cost_usd)::float8 as avg_cost
        from trajectories
-      where project_id = $1 and started_at >= $2::timestamptz
+      where project_id = $1 and scenario is null and started_at >= $2::timestamptz
       group by 1, 2`,
     [projectId, since14],
   );
@@ -220,7 +222,7 @@ export async function agentTimeseries(
             avg(input_tokens + output_tokens)::float8 as avg_tokens,
             avg(redundant_tool_calls)::float8 as avg_redundant
        from trajectories
-      where project_id = $1 and agent_name = $2
+      where project_id = $1 and scenario is null and agent_name = $2
         and started_at >= $3::timestamptz and started_at < $4::timestamptz
         ${versionFilter}
       group by 1
@@ -283,13 +285,13 @@ export async function agentVersions(
               avg(step_count)::float8 as avg_steps,
               avg(redundant_tool_calls)::float8 as avg_redundant
          from trajectories
-        where project_id = $1 and agent_name = $2
+        where project_id = $1 and scenario is null and agent_name = $2
         group by ${c}
      ),
      p as (
        select distinct on (${c}) ${c} as value, path_signature, count(*)::int as c
          from trajectories
-        where project_id = $1 and agent_name = $2
+        where project_id = $1 and scenario is null and agent_name = $2
         group by ${c}, path_signature
         order by ${c}, count(*) desc, path_signature
      )
@@ -369,13 +371,13 @@ export async function windowStats(
             ${momentCols('(input_tokens + output_tokens)', 'k')},
             ${momentCols('redundant_tool_calls', 'r')}
        from trajectories
-      where project_id = $1 and agent_name = $2 ${filter}`,
+      where project_id = $1 and scenario is null and agent_name = $2 ${filter}`,
     params,
   );
   const paths = await db.query<{ path_signature: string; c: number }>(
     `select path_signature, count(*)::int as c
        from trajectories
-      where project_id = $1 and agent_name = $2 ${filter}
+      where project_id = $1 and scenario is null and agent_name = $2 ${filter}
       group by path_signature`,
     params,
   );
@@ -498,6 +500,10 @@ export interface ListRunsOptions {
   appVersion?: string;
   promptVersion?: string;
   model?: string;
+  /** Runs d'un scénario d'évaluation. */
+  scenario?: string;
+  /** live : prod (sans scénario) ; eval : suites de tests. */
+  kind?: 'live' | 'eval';
   status?: 'ok' | 'error';
   /** Ne garder que les runs qui bouclent (appels d'outil répétés). */
   loopsOnly?: boolean;
@@ -509,7 +515,7 @@ export interface ListRunsOptions {
 
 const SUMMARY_COLS = `id, trace_id, agent_name, app_version, agent_version, prompt_version, status, started_at, duration_ms,
   step_count, tool_call_count, tool_error_count, redundant_tool_calls, retry_count,
-  cost_usd::float8 as cost_usd, cost_estimated, primary_model, path_signature, source_format`;
+  cost_usd::float8 as cost_usd, cost_estimated, primary_model, path_signature, source_format, scenario`;
 
 function toSummary(r: Record<string, unknown>): RunSummary {
   return {
@@ -532,6 +538,7 @@ function toSummary(r: Record<string, unknown>): RunSummary {
     primaryModel: (r.primary_model as string | null) ?? null,
     pathSignature: String(r.path_signature),
     sourceFormat: (r.source_format as string | null) ?? null,
+    scenario: (r.scenario as string | null) ?? null,
   };
 }
 
@@ -550,6 +557,9 @@ export async function listRuns(
   if (o.appVersion) add((i) => `app_version = $${i}`, o.appVersion);
   if (o.promptVersion) add((i) => `prompt_version = $${i}`, o.promptVersion);
   if (o.model) add((i) => `primary_model = $${i}`, o.model);
+  if (o.scenario) add((i) => `scenario = $${i}`, o.scenario);
+  if (o.kind === 'live') where.push('scenario is null');
+  if (o.kind === 'eval') where.push('scenario is not null');
   if (o.status) add((i) => `status = $${i}`, o.status);
   if (o.loopsOnly) where.push('redundant_tool_calls > 0');
   if (o.from) add((i) => `started_at >= $${i}::timestamptz`, o.from.toISOString());
@@ -602,13 +612,14 @@ export async function getRun(db: Db, projectId: string, id: string): Promise<Run
   };
 }
 
-/** Run précédent du même agent (pour comparer un run à son prédécesseur). */
+/** Run précédent du même agent — et du même scénario pour un run d'évaluation. */
 export async function previousRunId(db: Db, projectId: string, run: RunSummary): Promise<string | null> {
   const [r] = await db.query<{ id: string }>(
     `select id from trajectories
       where project_id = $1 and agent_name = $2 and (started_at, id) < ($3::timestamptz, $4::uuid)
+        and scenario is not distinct from $5
       order by started_at desc, id desc limit 1`,
-    [projectId, run.agentName, run.startedAt, run.id],
+    [projectId, run.agentName, run.startedAt, run.id, run.scenario],
   );
   return r?.id ?? null;
 }
@@ -629,13 +640,13 @@ export async function projectStats(db: Db, projectId: string, since: Date | null
             coalesce(sum(cost_usd), 0)::float8 as cost,
             coalesce(sum(tool_call_count), 0)::int as tools,
             coalesce(avg(duration_ms), 0)::float8 as avg_duration
-       from trajectories where project_id = $1 ${filter}`,
+       from trajectories where project_id = $1 and scenario is null ${filter}`,
     params,
   );
   const trend = await db.query<{ day: string; cost: number }>(
     `select to_char(date_trunc('day', started_at at time zone 'UTC'), 'YYYY-MM-DD') as day,
             coalesce(sum(cost_usd), 0)::float8 as cost
-       from trajectories where project_id = $1 ${filter}
+       from trajectories where project_id = $1 and scenario is null ${filter}
       group by 1 order by 1`,
     params,
   );
@@ -662,7 +673,7 @@ export async function topPaths(
   const rows = await db.query<{ path_signature: string; c: number; total: number }>(
     `select path_signature, count(*)::int as c, (sum(count(*)) over ())::int as total
        from trajectories
-      where project_id = $1 and agent_name = $2 ${filter}
+      where project_id = $1 and scenario is null and agent_name = $2 ${filter}
       group by path_signature
       order by c desc, path_signature
       limit $${params.length}`,

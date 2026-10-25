@@ -32,12 +32,17 @@ Corps : OTLP/JSON (`resourceSpans`), export de trace Langfuse, résultat
 
 En-têtes optionnels, utilisés **seulement si la trace n'en porte pas** :
 `X-Trajekt-Agent`, `X-Trajekt-App-Version`, `X-Trajekt-Agent-Version`,
-`X-Trajekt-Prompt-Version`, `X-Trajekt-Environment`.
+`X-Trajekt-Prompt-Version`, `X-Trajekt-Environment`, `X-Trajekt-Scenario`.
 
 **Dimensions.** Chaque run porte une version d'appli (`service.version`),
 une version d'agent (`trajekt.agent.version`, à défaut la version
 d'appli), une version de prompt et un modèle (le plus utilisé du run).
 Ce sont les quatre axes de comparaison : `dimension=app|agent|prompt|model`.
+
+**Runs d'évaluation.** Un run qui porte un scénario (`trajekt.scenario`,
+`metadata.scenario` côté Langfuse, ou l'en-tête) vient d'une suite de tests :
+il est exclu des métriques de prod, des tendances et des alertes, et se
+compare via `GET /api/agents/:name/evals`.
 
 **Fusion.** Un payload OTLP peut contenir plusieurs traces (une trajectoire
 par `traceId`), et une trace peut arriver en plusieurs envois : chaque envoi
@@ -51,7 +56,7 @@ run sont recalculées. Renvoyer un lot est sans effet (steps indexés par span i
   "trajectories": [
     {
       "id": "3f1c…", "traceId": "a1b2…", "agentName": "sentry-triage",
-      "appVersion": "3.2.0", "agentVersion": "1.5.0",
+      "appVersion": "3.2.0", "agentVersion": "1.5.0", "scenario": null,
       "sourceFormat": "otlp", "status": "ok", "stepCount": 11, "merged": true,
       "createdAt": "2026-10-24T10:00:03.000Z"
     }
@@ -115,6 +120,37 @@ mesuré sur au moins 20 runs de chaque côté. Métriques : `errorRate`,
 `toolErrorRate`, `durationMs`, `costUsd`, `stepCount`, `totalTokens`,
 `redundantToolCalls`, `newPathShare`.
 
+### `GET /api/agents/:name/evals?dimension=agent&a=<A>&b=<B>`
+
+Suite d'évaluation : compare les runs de B à ceux de A **scénario par
+scénario**. Sans `a`/`b` : la valeur la plus récente contre la précédente.
+`404` si l'agent n'a aucun run d'évaluation ou si une valeur est inconnue.
+
+```json
+{
+  "agent": "sentry-triage", "dimension": "agent", "a": "1.4.0", "b": "1.5.0",
+  "values": [{ "value": "1.5.0", "runs": 36, "scenarios": 12, "failedRuns": 2, "firstRun": "…", "lastRun": "…" }],
+  "comparison": {
+    "result": "fail",
+    "reasons": ["Steps per run regressed across the suite", "refund-rounding: 0/3 → 2/3 failed"],
+    "paired": 12, "onlyBaseline": [], "onlyCurrent": [],
+    "metrics": [{ "metric": "stepCount", "baseline": 9.06, "current": 10.61, "relDelta": 0.16, "pValue": 0.001, "verdict": "regression", "severity": "warning" }],
+    "scenarios": [{
+      "scenario": "refund-rounding", "verdict": "regression",
+      "changes": [{ "metric": "errorRate", "label": "Fails more often", "direction": "worse", "detail": "0/3 → 2/3 failed" }],
+      "baseline": { "runs": 3, "failed": 0, "path": "…" }, "current": { "runs": 3, "failed": 2, "path": "…" }
+    }]
+  },
+  "sampleRuns": { "refund-rounding": { "a": "<run id>", "b": "<run id>" } }
+}
+```
+
+`metrics` : test des rangs signés de Wilcoxon apparié, unilatéral,
+p < 0,05, écart minimum +15 % (rapport géométrique pour durée, coût,
+steps, tokens) ou +5 points sur un taux, 5 scénarios minimum.
+`result` vaut `fail` si une métrique régresse sur la suite ou si un scénario
+se met à échouer ; un nouveau chemin d'outils n'est jamais bloquant.
+
 ---
 
 ## Runs
@@ -126,6 +162,8 @@ mesuré sur au moins 20 runs de chaque côté. Métriques : `errorRate`,
 | `agent` | filtre exact |
 | `appVersion`, `version` (agent), `promptVersion`, `model` | filtres exacts par dimension |
 | `status` | `ok` ou `error` |
+| `scenario` | runs d'un scénario d'évaluation |
+| `kind` | `live` (prod seulement) ou `eval` (évaluation seulement) |
 | `loops=1` | seulement les runs avec appels d'outil répétés |
 | `from`, `to` | ISO 8601, sur le début du run |
 | `limit` | 50 par défaut, 200 max |

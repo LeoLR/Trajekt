@@ -208,3 +208,13 @@ a.dim-chip:hover { border-color: var(--text-4); color: var(--text); }
 .demo-hatch { flex-shrink: 0; width: 22px; height: 8px; border-radius: 2px; background: var(--hatch); }
 a.signout { display: inline-flex; align-items: center; }
 @media (max-width: 640px) { .demo-banner { width: calc(100% - 32px); } }
+
+/* ---------- Suites d'évaluation ---------- */
+.suite-result { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-top: 8px; }
+.suite-result strong { font-family: var(--mono); letter-spacing: 0.04em; }
+.suite-result.is-pass { border-color: rgba(61, 214, 140, 0.35); background: var(--ok-soft); }
+.suite-result.is-pass strong { color: var(--ok); }
+.suite-result.is-fail { border-color: rgba(255, 107, 107, 0.35); background: var(--err-soft); }
+.suite-result.is-fail strong { color: var(--err-text); }
+.suite-result ul { margin: 8px 0 0; padding-left: 18px; color: var(--text-2); font-size: 13px; }
+.scenario-change { font-size: 11.5px; white-space: nowrap; }

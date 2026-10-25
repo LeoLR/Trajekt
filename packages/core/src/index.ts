@@ -92,3 +92,24 @@ export {
   type DiffRow,
   type TrajectoryDiff,
 } from './diff.js';
+
+export {
+  compareScenarios,
+  scenarioRunOf,
+  signedRankPValues,
+  type ScenarioRun,
+  type ScenarioAggregate,
+  type ScenarioChange,
+  type ScenarioDiff,
+  type SuiteComparison,
+  type SuiteCompareOptions,
+} from './suite.js';
+
+export {
+  checkTrajectory,
+  assertTrajectory,
+  matchesPartially,
+  TrajectoryAssertionError,
+  type TrajectoryExpectations,
+  type ExpectationFailure,
+} from './expect.js';

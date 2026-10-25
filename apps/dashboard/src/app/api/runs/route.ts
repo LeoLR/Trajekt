@@ -25,6 +25,8 @@ export const GET = dashboardRoute(async ({ req, db, project }) => {
     appVersion: p.get('appVersion') ?? undefined,
     promptVersion: p.get('promptVersion') ?? undefined,
     model: p.get('model') ?? undefined,
+    scenario: p.get('scenario') ?? undefined,
+    kind: p.get('kind') === 'live' || p.get('kind') === 'eval' ? (p.get('kind') as 'live' | 'eval') : undefined,
     status: (status as 'ok' | 'error' | null) ?? undefined,
     loopsOnly: p.get('loops') === '1',
     from, to, cursor,

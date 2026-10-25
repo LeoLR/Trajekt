@@ -210,6 +210,7 @@ const langfuseNormalizer: Normalizer = {
         agentVersion: str(meta.agentVersion) ?? trace.version ?? trace.release ?? undefined,
         promptVersion: str(meta.promptVersion) ?? promptVersion,
         environment: trace.environment ?? undefined,
+        scenario: scenarioOf(str(meta.scenario)),
       },
       createdAt: trace.timestamp,
     };
@@ -364,8 +365,16 @@ function otlpFromEntries(entries: OtlpEntry[]): Trajectory {
         ['trajekt.environment'],
         ['deployment.environment.name', 'deployment.environment'],
       ),
+      scenario: scenarioOf(
+        pick(['trajekt.scenario', 'ai.telemetry.metadata.scenario'], ['trajekt.scenario']),
+      ),
     },
   };
+}
+
+/** Un run rattaché à un scénario est un run d'évaluation (suite de tests). */
+function scenarioOf(name: string | undefined): { name: string } | undefined {
+  return name ? { name } : undefined;
 }
 
 const aiSdkNormalizer: Normalizer = {

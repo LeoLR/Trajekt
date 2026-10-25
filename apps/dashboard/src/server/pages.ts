@@ -13,6 +13,7 @@ import {
   type RunSummary, type TimeseriesPoint, type VersionStats,
 } from './queries';
 import { recentAlerts, type AlertRow } from './alerts';
+import { listEvalAgents, loadSuitePage, type EvalAgent } from './suites';
 
 const DAY = 86400_000;
 
@@ -54,7 +55,22 @@ export async function loadAgentsPage(db: Db, projectId: string, now = new Date()
   for (const a of agents) healths.push(await healthOf(db, projectId, a, now));
   const order: Record<Health, number> = { regressed: 0, healthy: 1, insufficient: 2, idle: 3 };
   healths.sort((a, b) => order[a.health] - order[b.health]);
-  return { agents: healths, alerts: await recentAlerts(db, projectId, { limit: 8 }), now: now.toISOString() };
+  // Suites d'évaluation : la dernière version d'agent contre la précédente.
+  const evals = [];
+  for (const e of await listEvalAgents(db, projectId)) {
+    const suite = await loadSuitePage(db, projectId, e.name, { dimension: 'agent' });
+    const c = suite?.comparison ?? null;
+    evals.push({
+      ...e,
+      a: suite?.a ?? null,
+      b: suite?.b ?? null,
+      result: c?.result ?? null,
+      reasons: c?.reasons ?? [],
+      worse: c?.scenarios.filter((x) => x.verdict === 'regression').length ?? 0,
+      paired: c?.paired ?? 0,
+    });
+  }
+  return { agents: healths, evals, alerts: await recentAlerts(db, projectId, { limit: 8 }), now: now.toISOString() };
 }
 export type AgentsPageData = Awaited<ReturnType<typeof loadAgentsPage>>;
 
@@ -81,6 +97,8 @@ export interface AgentPageData {
   paths: Array<{ version: string | null; total: number; paths: Array<{ path: string; runs: number; share: number }> }>;
   recentRuns: RunSummary[];
   alerts: AlertRow[];
+  /** Suites d'évaluation de l'agent, s'il en a. */
+  evals: EvalAgent | null;
 }
 
 export interface AgentPageOptions {
@@ -169,8 +187,9 @@ export async function loadAgentPage(
     comparison,
     canCompareVersions: Boolean(latest),
     paths,
-    recentRuns: (await listRuns(db, projectId, { agent: name, limit: 12 })).items,
+    recentRuns: (await listRuns(db, projectId, { agent: name, kind: 'live', limit: 12 })).items,
     alerts: await recentAlerts(db, projectId, { agent: name, limit: 5 }),
+    evals: (await listEvalAgents(db, projectId)).find((e) => e.name === name) ?? null,
   };
 }
 
@@ -235,15 +254,25 @@ export async function loadComparePage(db: Db, projectId: string, id: string, wit
   if (withId) {
     a = await getRun(db, projectId, withId);
   } else {
-    const versions = (await agentVersions(db, projectId, b.summary.agentName)).filter((v) => v.version !== null);
+    // Run d'évaluation : la version précédente jouée sur le même scénario.
+    const scenario = b.summary.scenario;
+    const versions = scenario
+      ? (await db.query<{ version: string }>(
+          `select agent_version as version from trajectories
+            where project_id = $1 and agent_name = $2 and scenario = $3 and agent_version is not null
+            group by agent_version order by min(started_at) desc`,
+          [projectId, b.summary.agentName, scenario],
+        ))
+      : (await agentVersions(db, projectId, b.summary.agentName)).filter((v) => v.version !== null);
     const idx = versions.findIndex((v) => v.version === b.summary.agentVersion);
     const prev = idx >= 0 ? versions[idx + 1] : undefined;
     if (prev) {
       const [row] = await db.query<{ id: string }>(
         `select id from trajectories
           where project_id = $1 and agent_name = $2 and agent_version = $3 and status = 'ok'
+            and scenario is not distinct from $4
           order by started_at desc limit 1`,
-        [projectId, b.summary.agentName, prev.version],
+        [projectId, b.summary.agentName, prev.version, scenario],
       );
       if (row) {
         a = await getRun(db, projectId, row.id);
