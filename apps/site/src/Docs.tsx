@@ -144,6 +144,8 @@ pnpm dev                             # http://localhost:3000
                 <tr><td><C>SLACK_WEBHOOK_URL</C></td><td>no</td><td>Slack incoming webhook. New regressions are posted there.</td></tr>
                 <tr><td><C>TRAJEKT_PUBLIC_URL</C></td><td>no</td><td>Public URL of the dashboard, used for links in Slack messages.</td></tr>
                 <tr><td><C>TRAJEKT_PRICING</C></td><td>no</td><td>JSON price overrides, in USD per million tokens. See <a href="#library">cost estimation</a>.</td></tr>
+                <tr><td><C>TRAJEKT_REDACT</C></td><td>no</td><td>What to mask before storage: <C>secrets</C> (default), <C>email</C>, <C>iban</C>, <C>card</C>, <C>phone</C>, <C>ip</C>, comma-separated, or <C>none</C>. See <a href="#redaction">Sensitive data</a>.</td></tr>
+                <tr><td><C>TRAJEKT_REDACT_PATTERNS</C></td><td>no</td><td>Your own patterns, as JSON: <C>{'[{"name":"customer","pattern":"CUST-\\\\d{6}"}]'}</C>.</td></tr>
                 <tr><td><C>TRAJEKT_RETENTION_DAYS</C></td><td>no</td><td>Runs older than this are deleted when the cron runs. Empty: kept forever.</td></tr>
                 <tr><td><C>TRAJEKT_INGEST_RATE_PER_MIN</C></td><td>no</td><td>Ingestion requests per minute and per project, per server instance (default 600). Over it: <C>429</C> with <C>Retry-After</C>.</td></tr>
                 <tr><td><C>TRAJEKT_MAX_BODY_MB</C></td><td>no</td><td>Largest request accepted, after gzip (default 20). Over it: <C>413</C>.</td></tr>
@@ -402,6 +404,17 @@ docker compose exec dashboard pnpm check-regressions
           <p>
             A project groups runs and has its own API keys: one per team, product or environment. Create and open projects on the <C>/projects</C> page of the dashboard — the keys are shown once, at creation — or from the command line with <C>pnpm --filter dashboard create-project &lt;name&gt;</C>. There is still one sign-in password for the whole instance.
           </p>
+          <H3 id="redaction">Sensitive data</H3>
+          <p>
+            Prompts, tool arguments and tool results often carry customer data. Trajekt masks it <strong>before anything is stored</strong> — messages, arguments, results, errors and the original payload alike. By default it masks secrets: API keys and tokens (Anthropic, OpenAI, GitHub, GitLab, Slack, AWS, Stripe, Google, Trajekt), bearer headers, JWTs, and the value of keys such as <C>password</C>, <C>token</C>, <C>api_key</C> or <C>authorization</C>. Add what your domain needs:
+          </p>
+          <Code label=".env">{`
+TRAJEKT_REDACT=secrets,email,iban,card,phone
+TRAJEKT_REDACT_PATTERNS=[{"name":"customer","pattern":"CUST-\\\\d{6}"},{"name":"contract","pattern":"CTR-[A-Z0-9]{8}"}]
+`}</Code>
+          <p>
+            A match becomes a marker — <C>[email]</C>, <C>[iban]</C>, <C>[card]</C> (only numbers that pass the Luhn check), <C>[customer]</C> — always the same for the same kind of value, so metrics and repeated-call detection still work. If the configuration is invalid, ingestion refuses the request (<C>503</C>) rather than storing data you thought was masked. In your own code, <C>createRedactor</C> and <C>redactTrajectory</C> from <C>@trajekt/core</C> apply the same rules; with <C>traceAnthropic</C>, <C>{'{ captureContent: false }'}</C> keeps prompts out of the traces entirely.
+          </p>
           <ul>
             <li><strong>Retention</strong>: <C>TRAJEKT_RETENTION_DAYS=90</C> deletes older runs (and their scores) each time the cron runs; alerts are kept at least 90 days.</li>
             <li><strong>Storage</strong>: a run stores every step with its original payload. <C>TRAJEKT_STORE_RAW=false</C> drops the payload and roughly halves the size; Postgres already compresses the rest.</li>
@@ -481,6 +494,7 @@ docker compose exec dashboard pnpm create-read-key claude-desktop
                 <tr><td><C>decodeOtlpProtobuf(bytes)</C></td><td>An OTLP protobuf request → its OTLP/JSON form, ready for <C>normalize</C>. No dependency.</td></tr>
                 <tr><td><C>traceRun</C>, <C>traceTool</C>, <C>traceLlm</C>, <C>traceAnthropic(client, tracer)</C></td><td>The spans Trajekt reads, with any OpenTelemetry tracer; the Anthropic client wrapper records every model call. See <a href="#send-helpers">Instrument your code</a>.</td></tr>
                 <tr><td><C>scoreTrajectory(run, expectations)</C></td><td>The share of expectations met, to send as a quality score.</td></tr>
+                <tr><td><C>createRedactor(options)</C>, <C>redactTrajectory(run, options)</C></td><td>Mask emails, IBANs, cards, phones, secrets and your own patterns in any value or run. See <a href="#redaction">Sensitive data</a>.</td></tr>
                 <tr><td><C>setMutatingTools(rule)</C></td><td>Which tools change state (a regex, a list of names or a function), for repeated-call detection.</td></tr>
                 <tr><td><C>assertTrajectory(run, expectations)</C></td><td>Throws a readable error listing every unmet expectation (tools called, order, arguments, budgets). <C>checkTrajectory</C> returns the list instead.</td></tr>
                 <tr><td><C>compareScenarios(a, b)</C></td><td>Eval suite comparison, scenario by scenario: <C>result</C> (<C>pass</C> / <C>fail</C>), <C>reasons</C>, suite-level verdicts and per-scenario changes. <C>scenarioRunOf(run)</C> turns a trajectory into its input.</td></tr>

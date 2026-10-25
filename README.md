@@ -170,7 +170,7 @@ See [Testing your agent](https://trajekt-eight.vercel.app/docs/#testing) in the 
 
 ## Run it for a team
 
-Several projects per instance, each with its own API keys (`/projects`). Retention (`TRAJEKT_RETENTION_DAYS`), ingestion rate and size limits, and an option to drop raw payloads are in the [configuration](https://trajekt-eight.vercel.app/docs/#configuration).
+Several projects per instance, each with its own API keys (`/projects`). Customer data is masked before storage: secrets by default, emails, IBANs, cards, phones and your own patterns on demand. Retention (`TRAJEKT_RETENTION_DAYS`), ingestion rate and size limits, and an option to drop raw payloads are in the [configuration](https://trajekt-eight.vercel.app/docs/#configuration).
 
 ## Works with
 

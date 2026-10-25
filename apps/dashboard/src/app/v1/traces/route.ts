@@ -14,6 +14,7 @@ import { UnknownFormatError, decodeOtlpProtobuf } from '@trajekt/core';
 import { getDb } from '../../../server/db';
 import { verifyProjectApiKey } from '../../../server/auth';
 import { ingestPayload } from '../../../server/ingest';
+import { RedactionConfigError } from '../../../server/redaction';
 import { apiError, rateLimited } from '../../../lib/errors';
 import { maxBodyBytes, takeToken } from '../../../lib/ratelimit';
 import { isDemo } from '../../../lib/demo';
@@ -76,6 +77,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ trajectories: runs }, { status: 201 });
   } catch (e) {
     if (e instanceof UnknownFormatError) return apiError('UNKNOWN_FORMAT', e.message);
+    if (e instanceof RedactionConfigError) {
+      console.error(e.message);
+      return apiError('NOT_CONFIGURED', `${e.message} — nothing was stored.`);
+    }
     console.error(e);
     return apiError('INTERNAL_ERROR', 'Ingestion failed.');
   }

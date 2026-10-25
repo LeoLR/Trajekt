@@ -138,3 +138,11 @@ export {
   type SpanLike,
   type TracerLike,
 } from './instrument.js';
+
+export {
+  createRedactor,
+  redactTrajectory,
+  type RedactionOptions,
+  type RedactionPattern,
+  type BuiltInRedaction,
+} from './redact.js';

@@ -32,6 +32,8 @@ services:
       TRAJEKT_INGEST_RATE_PER_MIN: ${TRAJEKT_INGEST_RATE_PER_MIN:-}
       TRAJEKT_MAX_BODY_MB: ${TRAJEKT_MAX_BODY_MB:-}
       TRAJEKT_STORE_RAW: ${TRAJEKT_STORE_RAW:-}
+      TRAJEKT_REDACT: ${TRAJEKT_REDACT:-secrets}
+      TRAJEKT_REDACT_PATTERNS: ${TRAJEKT_REDACT_PATTERNS:-}
     ports:
       # Dashboard ET ingestion OTLP/HTTP (POST /v1/traces) sur le même port.
       - "3000:3000"

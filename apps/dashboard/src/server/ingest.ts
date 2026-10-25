@@ -15,9 +15,9 @@ import {
   computeMetrics,
   SCHEMA_VERSION,
   type Trajectory,
-  type TrajectorySource,
-} from '@trajekt/core';
+  type TrajectorySource, redactTrajectory } from '@trajekt/core';
 import type { Db } from './db';
+import { redactorFromEnv } from './redaction';
 
 /** Identité par défaut fournie par l'appelant (headers), utilisée si la trace n'en porte pas. */
 export interface IdentityDefaults {
@@ -202,8 +202,11 @@ export async function ingestPayload(
   defaults: IdentityDefaults = {},
 ): Promise<IngestedRun[]> {
   const keepRaw = process.env.TRAJEKT_STORE_RAW !== 'false';
+  const redact = redactorFromEnv();
   const trajectories = normalizeAll(raw)
     .map((t) => applyDefaults(t, defaults))
+    // Données sensibles masquées avant tout stockage (TRAJEKT_REDACT).
+    .map((t) => (redact ? redactTrajectory(t, redact) : t))
     // Sans le payload d'origine de chaque step, un run pèse environ deux fois moins.
     .map((t) => (keepRaw ? t : { ...t, steps: t.steps.map((step) => { const { raw: _raw, ...rest } = step; return rest as typeof step; }) }));
   const out: IngestedRun[] = [];

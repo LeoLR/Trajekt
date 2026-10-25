@@ -198,3 +198,30 @@ test('import Langfuse : pagination, détail des traces, scores, idempotent', asy
   assert.throws(() => parseSince('yesterday'), /Invalid --since/);
   assert.equal(parseSince('24h', NOW).toISOString(), '2026-10-23T12:00:00.000Z');
 });
+
+test('masquage à l’ingestion : configuré par l’environnement, fermé en cas d’erreur', async () => {
+  const { redactorFromEnv, RedactionConfigError } = await import('../src/server/redaction');
+  assert.ok(redactorFromEnv({}), 'secrets masqués par défaut');
+  assert.equal(redactorFromEnv({ TRAJEKT_REDACT: 'none' }), null);
+  assert.throws(() => redactorFromEnv({ TRAJEKT_REDACT: 'secrets,emails' }), RedactionConfigError);
+  assert.throws(() => redactorFromEnv({ TRAJEKT_REDACT_PATTERNS: '{"name":"x"}' }), /Invalid TRAJEKT_REDACT_PATTERNS/);
+
+  process.env.TRAJEKT_REDACT = 'secrets,email';
+  process.env.TRAJEKT_REDACT_PATTERNS = '[{"name":"customer","pattern":"CUST-\\\\d{6}"}]';
+  try {
+    const payload = {
+      id: 'lf-redact', name: 'support-bot', timestamp: NOW.toISOString(),
+      observations: [{
+        id: 'o1', type: 'TOOL', name: 'crm.lookup', startTime: NOW.toISOString(), endTime: NOW.toISOString(),
+        input: { email: 'marie@client.fr', customer: 'CUST-004211', token: 'abc' }, output: { note: 'Bearer abcdefghijklmnop1234' },
+      }],
+    };
+    const [run] = await ingestPayload(db, projectId, payload);
+    const [{ steps }] = await db.query<{ steps: string }>('select steps::text as steps from trajectories where id = $1', [run.id]);
+    for (const leak of ['marie@client.fr', 'CUST-004211', 'abcdefghijklmnop1234', '"abc"']) assert.ok(!steps.includes(leak), `fuite : ${leak}`);
+    assert.ok(steps.includes('[email]') && steps.includes('[customer]') && steps.includes('[redacted]'));
+  } finally {
+    delete process.env.TRAJEKT_REDACT;
+    delete process.env.TRAJEKT_REDACT_PATTERNS;
+  }
+});
