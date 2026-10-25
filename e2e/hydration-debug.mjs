@@ -13,7 +13,7 @@ await page.goto(BASE + '/login');
 await page.fill('input[name="password"]', process.env.DASHBOARD_PASSWORD);
 await page.click('button[type="submit"]');
 await page.waitForURL(BASE + '/');
-for (let round = 0; round < 4; round++) {
+for (let round = 0; round < 12; round++) {
   for (const p of pages) {
     await page.goto(BASE + p, { waitUntil: 'networkidle' });
     await page.waitForTimeout(400);
@@ -22,4 +22,5 @@ for (let round = 0; round < 4; round++) {
 await browser.close();
 const unique = [...new Set(errors.map((e) => e.slice(0, 4000)))];
 console.log(`${errors.length} errors, ${unique.length} unique`);
+console.log(`::notice title=hydration ${process.env.REF ?? ''}::${errors.length} errors over ${12 * pages.length} page loads`);
 for (const e of unique.slice(0, 5)) console.log(`::error title=hydration::${e.replace(/\r?\n/g, '%0A')}`);

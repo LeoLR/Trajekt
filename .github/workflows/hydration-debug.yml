@@ -1,6 +1,10 @@
 name: Hydration debug (temporary)
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: commit de l'application à tester
+        required: true
 jobs:
   debug:
     runs-on: ubuntu-latest
@@ -19,6 +23,10 @@ jobs:
       BASE_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      - run: git fetch -q origin main && git checkout -q origin/main -- e2e/hydration-debug.mjs
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -29,13 +37,14 @@ jobs:
       - run: |
           pnpm --filter dashboard migrate
           pnpm --filter dashboard seed
-      - name: Start next dev
+      - run: pnpm --filter dashboard build
+      - name: Start next
         run: |
-          pnpm --filter dashboard dev > /tmp/next.log 2>&1 &
+          pnpm --filter dashboard start > /tmp/next.log 2>&1 &
           for i in $(seq 1 90); do curl -fs -o /dev/null http://localhost:3000/login && exit 0; sleep 1; done
           cat /tmp/next.log; exit 1
       - working-directory: e2e
         run: |
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
-          node hydration-debug.mjs
+          REF=${{ inputs.ref }} node hydration-debug.mjs
