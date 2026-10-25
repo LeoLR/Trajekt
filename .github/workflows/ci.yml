@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['54329:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Pas encore de lockfile versionné (voir README).
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm --filter @trajekt/core build
+      - name: Library tests
+        run: pnpm --filter @trajekt/core test
+      - name: Dashboard tests (real SQL on Postgres)
+        run: pnpm --filter dashboard test
+      - name: GitHub Action tests
+        run: node --test actions/eval-suite/index.test.mjs
+      - name: Example eval suite — v1 passes, v2 is caught
+        working-directory: packages/core
+        run: |
+          AGENT_VERSION=v1 pnpm exec tsx --test ../../examples/eval-suite/suite.test.ts
+          if pnpm exec tsx ../../examples/eval-suite/compare.ts v1 v2; then
+            echo "::error::the v2 regression should have failed the suite"; exit 1
+          fi
+          pnpm exec tsx ../../examples/eval-suite/compare.ts v2 v1

@@ -1,0 +1,52 @@
+name: Trajekt eval suite
+description: Compare two versions of an AI agent on its eval suite with Trajekt, scenario by scenario. Fails the job on a regression and comments the result on the pull request.
+author: Trajekt
+branding:
+  icon: activity
+  color: orange
+
+inputs:
+  url:
+    description: Base URL of your Trajekt instance, e.g. https://trajekt.example.com
+    required: true
+  read-key:
+    description: A Trajekt read API key (tk_read_…). Store it as a secret. Not needed for the public demo.
+    required: false
+    default: ''
+  agent:
+    description: Agent name, as shown in Trajekt.
+    required: true
+  dimension:
+    description: What differs between the two versions — agent, prompt, app or model.
+    required: false
+    default: agent
+  baseline:
+    description: Value to compare against (A), e.g. the agent version or commit SHA evaluated on main. Empty = the previous value evaluated.
+    required: false
+    default: ''
+  candidate:
+    description: Value under test (B), e.g. the commit SHA of this run. Empty = the latest value evaluated.
+    required: false
+    default: ''
+  fail-on-regression:
+    description: Fail the job when the suite result is "fail".
+    required: false
+    default: 'true'
+  comment:
+    description: Post (or update) a comment with the result on the pull request.
+    required: false
+    default: 'true'
+  github-token:
+    description: Token used to comment on the pull request. Needs pull-requests write permission.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  result:
+    description: pass or fail
+  report-url:
+    description: Link to the comparison in the Trajekt dashboard.
+
+runs:
+  using: node20
+  main: index.mjs

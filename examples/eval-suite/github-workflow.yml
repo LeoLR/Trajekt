@@ -1,0 +1,42 @@
+# Copy to .github/workflows/agent-evals.yml in your repository.
+#
+# On main: run the eval suite and record it under the commit SHA (the baseline).
+# On a pull request: run it for the PR head, then compare with the base commit.
+name: Agent evals
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write # to comment the result on the PR
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    env:
+      AGENT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. Run your suite: mocked tools and data, a few runs per scenario.
+      #    Each run is traced with trajekt.scenario and trajekt.agent.version=$AGENT_SHA,
+      #    and exported to Trajekt (OTLP/HTTP JSON).
+      - run: npm ci && npm run eval
+        env:
+          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.TRAJEKT_URL }}
+          OTEL_EXPORTER_OTLP_PROTOCOL: http/json
+          OTEL_EXPORTER_OTLP_HEADERS: Authorization=Bearer ${{ secrets.TRAJEKT_INGEST_KEY }}
+
+      # 2. On a PR: compare with the base commit, comment, and fail on a regression.
+      - if: github.event_name == 'pull_request'
+        uses: LeoLR/Trajekt/actions/eval-suite@main
+        with:
+          url: ${{ vars.TRAJEKT_URL }}
+          read-key: ${{ secrets.TRAJEKT_READ_KEY }}
+          agent: sentry-triage
+          dimension: agent
+          baseline: ${{ github.event.pull_request.base.sha }}
+          candidate: ${{ env.AGENT_SHA }}

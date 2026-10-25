@@ -150,7 +150,19 @@ Replay a fixed set of scenarios — mocked tools and data — on every change, a
   });
   ```
 
-- **Compare eval suites.** Tag eval runs with `trajekt.scenario` (and the version under test). Trajekt keeps them out of production metrics and compares each scenario with itself across two versions — a paired test that catches a regression with a dozen scenarios — then says `pass` or `fail`, which scenarios got worse, and links to a step-by-step diff. Gate your CI on `GET /api/agents/:name/evals` or, without a server, on `compareScenarios()` from `@trajekt/core`.
+- **Compare eval suites.** Tag eval runs with `trajekt.scenario` (and the version under test). Trajekt keeps them out of production metrics and compares each scenario with itself across two versions — a paired test that catches a regression with a dozen scenarios — then says `pass` or `fail`, which scenarios got worse, and links to a step-by-step diff. - **Gate your pull requests.** The [GitHub Action](actions/eval-suite) compares the PR head with its base, comments the result on the pull request — which scenarios got worse, with a link to their diff — and fails the job on a regression:
+
+  ```yaml
+  - uses: LeoLR/Trajekt/actions/eval-suite@main
+    with:
+      url: ${{ vars.TRAJEKT_URL }}
+      read-key: ${{ secrets.TRAJEKT_READ_KEY }}
+      agent: sentry-triage
+      baseline: ${{ github.event.pull_request.base.sha }}
+      candidate: ${{ github.event.pull_request.head.sha }}
+  ```
+
+  Other CIs call `GET /api/agents/:name/evals`; without a server, use `compareScenarios()` from `@trajekt/core`. A runnable example is in [`examples/eval-suite`](examples/eval-suite).
 
 See [Testing your agent](https://trajekt-eight.vercel.app/docs/#testing) in the docs, and the eval suite of the [live demo](https://trajekt-demo.vercel.app/agents/sentry-triage/evals).
 
@@ -167,14 +179,19 @@ See [Testing your agent](https://trajekt-eight.vercel.app/docs/#testing) in the 
 
 ```
 packages/
-  core/          @trajekt/core — normalize(), merge, metrics, regression tests, run diff
+  core/          @trajekt/core — normalize(), merge, metrics, regression tests, run diff,
+                 eval suite comparison, trajectory assertions
 apps/
   dashboard/     Next.js — ingestion (POST /v1/traces), API and dashboard
     migrations/    SQL schema (one Postgres, nothing else)
     src/server/    ingestion, queries, alerts, simulated traffic
     src/views/     dashboard pages
     test/          tests against a real Postgres
-  site/          Landing page (Vite + React, prerendered)
+  site/          Landing page and docs (Vite + React, prerendered)
+actions/
+  eval-suite/    GitHub Action — compare eval suites on pull requests
+examples/
+  eval-suite/    a toy agent, mocked scenarios, behaviour tests and suite comparison
 docs/            API contract, architecture notes, assets
 docker-compose.yml   Postgres + dashboard
 ```

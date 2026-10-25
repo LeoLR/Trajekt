@@ -462,14 +462,53 @@ for (const scenario of scenarios) {          // e.g. 10–30 mocked Sentry issue
 
           <H3 id="eval-ci">In CI</H3>
           <p>
-            Two ways to turn the suite into a check, depending on whether your CI can reach Trajekt.
+            <strong>GitHub Actions.</strong> Record the suite on <C>main</C> under the commit SHA, run it again on each pull request, and let the action compare the two. It writes the result to the job summary, posts one comment on the pull request (updated on each push) with the scenarios that got worse and a link to their diff, and fails the job on a regression.
           </p>
+          <Code lang="yaml" label=".github/workflows/agent-evals.yml">{`
+name: Agent evals
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    env:
+      AGENT_SHA: \${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      # Your suite: mocked tools, a few runs per scenario, each traced with
+      # trajekt.scenario and trajekt.agent.version=$AGENT_SHA.
+      - run: npm ci && npm run eval
+        env:
+          OTEL_EXPORTER_OTLP_ENDPOINT: \${{ vars.TRAJEKT_URL }}
+          OTEL_EXPORTER_OTLP_PROTOCOL: http/json
+          OTEL_EXPORTER_OTLP_HEADERS: Authorization=Bearer \${{ secrets.TRAJEKT_INGEST_KEY }}
+      - if: github.event_name == 'pull_request'
+        uses: LeoLR/Trajekt/actions/eval-suite@main
+        with:
+          url: \${{ vars.TRAJEKT_URL }}
+          read-key: \${{ secrets.TRAJEKT_READ_KEY }}
+          agent: sentry-triage
+          baseline: \${{ github.event.pull_request.base.sha }}
+          candidate: \${{ env.AGENT_SHA }}
+`}</Code>
+          <p>
+            Inputs: <C>dimension</C> (<C>agent</C> by default; <C>prompt</C>, <C>app</C> or <C>model</C> to compare on another label), <C>fail-on-regression</C> and <C>comment</C> (both <C>true</C>). Outputs: <C>result</C> and <C>report-url</C>. The baseline commit must have been evaluated — that is what the <C>push</C> trigger on <C>main</C> is for. All options are in the <a href="https://github.com/LeoLR/Trajekt/tree/main/actions/eval-suite">action's README</a>.
+          </p>
+          <p><strong>Any other CI</strong> calls the same endpoint:</p>
           <Code label="against a Trajekt instance (read key)">{`
 curl -s -H "Authorization: Bearer $TRAJEKT_READ_KEY" \\
   "$TRAJEKT_URL/api/agents/sentry-triage/evals?dimension=agent&a=$BASE_SHA&b=$GIT_SHA" \\
   | jq -e '.comparison.result == "pass"' || { echo "eval suite regressed"; exit 1; }
 `}</Code>
-          <Code lang="ts" label="without a server: compare two saved runs of the suite">{`
+          <p><strong>Without a server</strong>, compare two saved runs of the suite in code:</p>
+          <Code lang="ts" label="eval/compare.ts">{`
 import { normalize, scenarioRunOf, compareScenarios } from '@trajekt/core';
 
 const baseline = loadRuns('eval/baseline/').map((t) => scenarioRunOf(normalize(t)));
@@ -481,7 +520,7 @@ if (r.result === 'fail') {
 }
 `}</Code>
           <p>
-            An agent can do the same through MCP with <C>compare_eval_suite</C>: "did my branch make sentry-triage worse?".
+            A runnable version of all this — a toy agent, mocked scenarios, behaviour tests and the comparison — is in <a href="https://github.com/LeoLR/Trajekt/tree/main/examples/eval-suite"><C>examples/eval-suite</C></a>. An agent can ask the same question through MCP with <C>compare_eval_suite</C>: "did my branch make sentry-triage worse?".
           </p>
 
           <H3 id="test-trajekt">Test Trajekt itself</H3>
