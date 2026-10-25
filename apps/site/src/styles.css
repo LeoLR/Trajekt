@@ -88,6 +88,8 @@ h1 { font-size: clamp(42px, 6.2vw, 72px); font-weight: 700; letter-spacing: -0.0
 .copy:hover { color: var(--amber); background: var(--surface-2); }
 .source-link { display: inline-flex; align-items: center; min-height: 44px; margin-top: 12px; color: var(--text-2); font-size: 15px; }
 .source-link:hover { color: var(--amber); }
+.source-links { display: flex; flex-wrap: wrap; column-gap: 24px; }
+.source-links .source-link { margin-top: 4px; }
 
 /* ---------- Recorder ---------- */
 .recorder { margin: 0; border: 1px solid var(--border-strong); border-radius: 12px; overflow: hidden; background: var(--surface); min-width: 0; }

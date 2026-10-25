@@ -1,6 +1,6 @@
 import { Recorder } from './Recorder';
 import { Playground } from './Playground';
-import { CopyButton, Hatch, Logo, Page, QUICKSTART_URL, REPO_URL } from './Layout';
+import { CopyButton, DEMO_URL, Hatch, Logo, Page, QUICKSTART_URL, REPO_URL } from './Layout';
 
 const INSTALL = 'npm i @trajekt/core';
 
@@ -135,7 +135,10 @@ export function App() {
                 <a className="btn btn-amber btn-lg" href={QUICKSTART_URL}>Get started</a>
                 <CopyCommand />
               </div>
-              <a className="source-link" href={REPO_URL}>View the source on GitHub →</a>
+              <div className="source-links">
+                <a className="source-link" href={DEMO_URL}>Open the live demo →</a>
+                <a className="source-link" href={REPO_URL}>View the source on GitHub →</a>
+              </div>
             </div>
             <Recorder />
           </div>
@@ -226,6 +229,7 @@ $ docker compose up -d
             <h2 className="h2">Record your next run.</h2>
             <div className="cta-row center">
               <a className="btn btn-amber btn-lg" href={QUICKSTART_URL}>Get started</a>
+              <a className="btn btn-outline btn-lg" href={DEMO_URL}>Live demo</a>
               <a className="btn btn-outline btn-lg" href={REPO_URL}>View on GitHub</a>
             </div>
           </div>

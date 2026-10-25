@@ -11,9 +11,12 @@
 
 **Trajekt records every run of your AI agent — each step, the model's reasoning, tool calls with their arguments and results, tokens, latency and cost — and lets you replay the trajectory step by step. Built for the moment an agent goes off the rails in production.**
 
+> **Try it without installing anything:** the [live demo](https://trajekt-demo.vercel.app) replays two weeks of simulated traffic from two agents, one of which regressed after a release. Its read-only MCP endpoint is open too: `claude mcp add --transport http trajekt https://trajekt-demo.vercel.app/api/mcp`.
+
 <p align="center">
+  <a href="https://trajekt-demo.vercel.app"><strong>Live demo</strong></a> ·
   <a href="#quickstart">Quickstart</a> ·
-  <a href="docs/api-contract.md">Docs</a> ·
+  <a href="https://trajekt-eight.vercel.app/docs/">Docs</a> ·
   <a href="DOCKER.md">Self-hosting</a> ·
   <a href="#contributing">Contributing</a>
 </p>

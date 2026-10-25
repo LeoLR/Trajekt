@@ -107,6 +107,7 @@ export function Footer() {
         </div>
         <nav className="footer-nav" aria-label="Footer">
           <a href={DOCS_URL}>Docs</a>
+          <a href={DEMO_URL}>Live demo</a>
           <a href={REPO_URL}>GitHub</a>
           <a href={CHANGELOG_URL}>Changelog</a>
         </nav>
