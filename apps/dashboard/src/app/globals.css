@@ -50,6 +50,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .nav a[aria-current='page'] { color: var(--text); background: var(--surface-2); }
 .signout { background: none; border: 1px solid var(--border-strong); color: var(--text-2); border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; min-height: 36px; }
 .signout:hover { color: var(--text); border-color: var(--text-4); }
+.lang-switch { flex-shrink: 0; color: var(--text-3); font-size: 12.5px; letter-spacing: 0.04em; min-height: 36px; display: inline-flex; align-items: center; padding: 0 4px; margin-right: -16px; }
+.lang-switch:hover { color: #FFB224; }
 .page { max-width: 1200px; margin: 0 auto; padding: 32px 24px 80px; }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
 .eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
@@ -184,6 +186,7 @@ pre.code { margin: 0; background: var(--bg); border: 1px solid var(--border); bo
   .logo-word { display: none; }
   .nav a { padding: 8px 9px; }
   .signout { padding: 6px 10px; }
+  .lang-switch { margin-right: 0; flex-shrink: 0; }
   .page { padding: 24px 16px 64px; }
   .tl-row, .tl-axis { grid-template-columns: 36px minmax(110px, 140px) 1fr; padding: 0 10px; }
   .chart text { font-size: 15px; }

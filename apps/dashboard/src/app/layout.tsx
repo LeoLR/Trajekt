@@ -1,14 +1,16 @@
 import type { ReactNode } from 'react';
 import './globals.css';
+import { requestLang } from './context';
 
 export const metadata = {
   title: 'Trajekt',
   description: 'The flight recorder for AI agents.',
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const lang = await requestLang();
   return (
-    <html lang="en">
+    <html lang={lang}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />

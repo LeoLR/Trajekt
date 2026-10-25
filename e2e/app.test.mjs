@@ -102,6 +102,25 @@ test('ouvrir un fichier de trace dans le navigateur', async () => {
 
 let ingestKey, readKey;
 
+test('interface en français : sélecteur EN/FR, pages serveur et client', async () => {
+  await page.goto(BASE + '/agents/sentry-triage');
+  await page.click('.lang-switch');
+  await page.waitForURL(BASE + '/agents/sentry-triage');
+  assert.equal(await page.getAttribute('html', 'lang'), 'fr');
+  await visit('/agents/sentry-triage', /Est-ce que ça se dégrade/);
+  await visit('/', /En régression/);
+  await visit('/agents/sentry-triage/evals', /Scénario par scénario/);
+  await visit('/runs', /Tous les agents/);
+  await visit('/explore', /Ouvrir une trace/);
+  await page.setInputFiles('input[type="file"]', new URL('../docs/assets/samples/otlp-sentry-triage.json', import.meta.url).pathname);
+  await page.waitForSelector('.tl-row');
+  assert.match(await page.locator('body').innerText(), /BOÎTE NOIRE/);
+  assert.deepEqual(problems, []);
+  // Retour à l'anglais pour la suite.
+  await page.click('.lang-switch');
+  await visit('/', /Regressed/);
+});
+
 test('créer un projet, envoyer des traces (JSON et protobuf), des scores ; masquage', async () => {
   await visit('/projects');
   await page.fill('input[placeholder="checkout-agents"]', 'e2e');

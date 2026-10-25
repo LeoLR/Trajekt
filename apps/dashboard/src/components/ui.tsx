@@ -3,6 +3,16 @@
 import type { ReactNode } from 'react';
 import { isDemo } from '../lib/demo';
 import type { Comparison } from '@trajekt/core';
+import { coreText, getLang, type Lang } from '../lib/i18n';
+
+/** Lien vers l'autre langue (cookie posé par /api/lang, retour sur la page). */
+export function LangSwitch({ lang = getLang() }: { lang?: Lang }) {
+  const other: Lang = lang === 'fr' ? 'en' : 'fr';
+  return (
+    <a className="lang-switch mono" href={`/api/lang?to=${other}`} hrefLang={other} lang={other}
+      aria-label={other === 'fr' ? 'Afficher en français' : 'Switch to English'}>{other.toUpperCase()}</a>
+  );
+}
 
 export function LogoMark({ size = 20 }: { size?: number }) {
   return (
@@ -22,28 +32,32 @@ export function Logo() {
   );
 }
 
-export function Shell({ active, children }: { active?: 'agents' | 'runs' | 'explore' | 'projects'; children: ReactNode }) {
+export function Shell({ active, lang: langProp, children }: { active?: 'agents' | 'runs' | 'explore' | 'projects'; lang?: Lang; children: ReactNode }) {
+  // Les vues client (ExploreView) passent la langue ; les vues serveur la lisent de la requête.
+  const lang = langProp ?? getLang();
+  const fr = lang === 'fr';
   const nav: Array<[typeof active, string, string]> = [
     ['agents', '/', 'Agents'],
     ['runs', '/runs', 'Runs'],
-    ['explore', '/explore', 'Open a trace'],
-    ...(isDemo() ? [] : [['projects', '/projects', 'Projects'] as [typeof active, string, string]]),
+    ['explore', '/explore', fr ? 'Ouvrir une trace' : 'Open a trace'],
+    ...(isDemo() ? [] : [['projects', '/projects', fr ? 'Projets' : 'Projects'] as [typeof active, string, string]]),
   ];
   return (
     <>
       <header className="shell-header">
         <div className="shell-header-inner">
-          <a href="/" aria-label="Trajekt home"><Logo /></a>
-          <nav className="nav" aria-label="Main">
+          <a href="/" aria-label={fr ? 'Accueil Trajekt' : 'Trajekt home'}><Logo /></a>
+          <nav className="nav" aria-label={fr ? 'Principal' : 'Main'}>
             {nav.map(([key, href, label]) => (
               <a key={href} href={href} aria-current={active === key ? 'page' : undefined}>{label}</a>
             ))}
           </nav>
+          <LangSwitch lang={lang} />
           {isDemo() ? (
-            <a className="signout" href="https://trajekt-eight.vercel.app/docs/#quickstart">Self-host it</a>
+            <a className="signout" href={fr ? 'https://trajekt-eight.vercel.app/fr/docs/#quickstart' : 'https://trajekt-eight.vercel.app/docs/#quickstart'}>{fr ? 'L’auto-héberger' : 'Self-host it'}</a>
           ) : (
             <form action="/logout" method="post">
-              <button className="signout" type="submit">Sign out</button>
+              <button className="signout" type="submit">{fr ? 'Déconnexion' : 'Sign out'}</button>
             </form>
           )}
         </div>
@@ -51,7 +65,9 @@ export function Shell({ active, children }: { active?: 'agents' | 'runs' | 'expl
       {isDemo() && (
         <div className="demo-banner" role="note">
           <span className="demo-hatch" aria-hidden="true" />
-          <span><strong>Live demo</strong> — simulated traces from two agents. <code className="mono">sentry-triage</code> regressed when agent 1.5.0 and prompt v8 shipped; <code className="mono">support-bot</code> is healthy. Read-only.</span>
+          {fr
+            ? <span><strong>Démo</strong> — traces simulées de deux agents. <code className="mono">sentry-triage</code> a régressé à la sortie de l’agent 1.5.0 et du prompt v8 ; <code className="mono">support-bot</code> va bien. Lecture seule.</span>
+            : <span><strong>Live demo</strong> — simulated traces from two agents. <code className="mono">sentry-triage</code> regressed when agent 1.5.0 and prompt v8 shipped; <code className="mono">support-bot</code> is healthy. Read-only.</span>}
         </div>
       )}
       <main className="page">{children}</main>
@@ -67,16 +83,17 @@ export function StatusDot({ status }: { status: 'ok' | 'error' | 'regressed' | '
 export function RunStatus({ status }: { status: 'ok' | 'error' }) {
   return status === 'ok'
     ? <span className="chip chip-ok"><StatusDot status="ok" />ok</span>
-    : <span className="chip chip-err"><StatusDot status="error" />failed</span>;
+    : <span className="chip chip-err"><StatusDot status="error" />{getLang() === 'fr' ? 'échec' : 'failed'}</span>;
 }
 
 export function VerdictChip({ c }: { c: Comparison }) {
+  const fr = getLang() === 'fr';
   if (c.verdict === 'regression') {
-    return <span className={c.severity === 'critical' ? 'chip chip-err' : 'chip chip-amber'}>{c.severity === 'critical' ? 'critical' : 'regression'}</span>;
+    return <span className={c.severity === 'critical' ? 'chip chip-err' : 'chip chip-amber'}>{c.severity === 'critical' ? (fr ? 'critique' : 'critical') : (fr ? 'régression' : 'regression')}</span>;
   }
-  if (c.verdict === 'improvement') return <span className="chip chip-ok">better</span>;
-  if (c.verdict === 'insufficient') return <span className="chip" title={c.detail}>not enough data</span>;
-  return <span className="chip" title={c.detail}>stable</span>;
+  if (c.verdict === 'improvement') return <span className="chip chip-ok">{fr ? 'mieux' : 'better'}</span>;
+  if (c.verdict === 'insufficient') return <span className="chip" title={coreText(c.detail)}>{fr ? 'pas assez de données' : 'not enough data'}</span>;
+  return <span className="chip" title={coreText(c.detail)}>stable</span>;
 }
 
 export function Kpi({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {

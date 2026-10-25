@@ -9,6 +9,7 @@
 import { useMemo, useState } from 'react';
 import type { StepAnnotation, Trajectory, TrajectoryStep } from '@trajekt/core';
 import { formatCost, formatDuration, stepTitle } from '../lib/format';
+import type { Lang } from '../lib/i18n';
 
 const TYPE_COLOR: Record<TrajectoryStep['type'], string> = {
   llm_call: '#7AA2F7',
@@ -25,6 +26,14 @@ const TYPE_LABEL: Record<TrajectoryStep['type'], string> = {
   agent_message: 'Agent message',
   decision: 'Decision',
   custom: 'System',
+};
+const TYPE_LABEL_FR: Record<TrajectoryStep['type'], string> = {
+  llm_call: 'Appel LLM',
+  tool_call: 'Appel d’outil',
+  user_message: 'Message utilisateur',
+  agent_message: 'Message de l’agent',
+  decision: 'Décision',
+  custom: 'Système',
 };
 
 interface Placed {
@@ -61,11 +70,12 @@ function flagsFor(p: Placed): Array<{ text: string; tone: 'amber' | 'err' }> {
 }
 
 export function RunTimeline({
-  trajectory, annotations, header,
+  trajectory, annotations, header, lang = 'en',
 }: {
   trajectory: Trajectory;
   annotations: StepAnnotation[];
   header: { left: string; right: string };
+  lang?: Lang;
 }) {
   const { rows, total, timed } = useMemo(() => place(trajectory.steps, annotations), [trajectory, annotations]);
   // Sélection initiale : le premier step réellement en cause, pas le span
@@ -80,7 +90,7 @@ export function RunTimeline({
 
   return (
     <div>
-      <div className="recorder-bar" aria-hidden="true">AGENT FLIGHT RECORDER</div>
+      <div className="recorder-bar" aria-hidden="true">{lang === 'fr' ? 'BOÎTE NOIRE D’AGENT' : 'AGENT FLIGHT RECORDER'}</div>
       <div className="timeline">
         <div className="tl-head"><span>{header.left}</span><span>{header.right}</span></div>
         {timed && (
@@ -126,7 +136,7 @@ export function RunTimeline({
           })}
         </div>
       </div>
-      {active && <StepDetail p={active} />}
+      {active && <StepDetail p={active} fr={lang === 'fr'} />}
     </div>
   );
 }
@@ -137,18 +147,18 @@ function pretty(v: unknown): string {
   return JSON.stringify(v, null, 2);
 }
 
-function StepDetail({ p }: { p: Placed }) {
+function StepDetail({ p, fr }: { p: Placed; fr: boolean }) {
   const s = p.step;
   const blocks: Array<[string, unknown]> = [];
   if (s.type === 'tool_call') {
-    blocks.push(['Arguments', s.args], ['Result', s.result]);
+    blocks.push(['Arguments', s.args], [fr ? 'Résultat' : 'Result', s.result]);
   } else if (s.type === 'llm_call') {
-    if (s.input.length) blocks.push(['Input', s.input.map((m) => ({ role: m.role, content: m.content }))]);
-    if (s.output) blocks.push(['Output', s.output.content]);
+    if (s.input.length) blocks.push([fr ? 'Entrée' : 'Input', s.input.map((m) => ({ role: m.role, content: m.content }))]);
+    if (s.output) blocks.push([fr ? 'Sortie' : 'Output', s.output.content]);
   } else if (s.type === 'custom') {
-    blocks.push(['Attributes', s.data]);
+    blocks.push([fr ? 'Attributs' : 'Attributes', s.data]);
   } else if ('content' in s) {
-    blocks.push(['Content', s.content]);
+    blocks.push([fr ? 'Contenu' : 'Content', s.content]);
   }
   const visible = blocks.filter(([, v]) => v !== undefined && v !== null && v !== '');
 
@@ -158,16 +168,16 @@ function StepDetail({ p }: { p: Placed }) {
         <div className="row">
           <span className="type-dot" style={{ background: TYPE_COLOR[s.type] }} aria-hidden="true" />
           <strong className="mono">#{s.index + 1} {stepTitle(s)}</strong>
-          <span className="chip">{TYPE_LABEL[s.type]}</span>
+          <span className="chip">{(fr ? TYPE_LABEL_FR : TYPE_LABEL)[s.type]}</span>
           {flagsFor(p).map((f) => <span key={f.text} className={f.tone === 'err' ? 'chip chip-err' : 'chip chip-amber'}>{f.text}</span>)}
         </div>
       </div>
       <div className="kv">
-        <div><span>Duration</span><b>{formatDuration(s.durationMs)}</b></div>
-        {s.timestamp && <div><span>Started at</span><b>+{formatDuration(p.start)}</b></div>}
-        {s.type === 'llm_call' && <div><span>Tokens in / out</span><b>{s.usage?.inputTokens ?? '—'} / {s.usage?.outputTokens ?? '—'}</b></div>}
-        {s.type === 'llm_call' && s.costUsd !== undefined && <div><span>Cost</span><b>{formatCost(s.costUsd)}</b></div>}
-        {p.ann.repeatOf !== undefined && <div><span>Same call as</span><b>#{p.ann.repeatOf + 1}</b></div>}
+        <div><span>{fr ? 'Durée' : 'Duration'}</span><b>{formatDuration(s.durationMs)}</b></div>
+        {s.timestamp && <div><span>{fr ? 'Début' : 'Started at'}</span><b>+{formatDuration(p.start)}</b></div>}
+        {s.type === 'llm_call' && <div><span>{fr ? 'Tokens entrée / sortie' : 'Tokens in / out'}</span><b>{s.usage?.inputTokens ?? '—'} / {s.usage?.outputTokens ?? '—'}</b></div>}
+        {s.type === 'llm_call' && s.costUsd !== undefined && <div><span>{fr ? 'Coût' : 'Cost'}</span><b>{formatCost(s.costUsd)}</b></div>}
+        {p.ann.repeatOf !== undefined && <div><span>{fr ? 'Même appel que' : 'Same call as'}</span><b>#{p.ann.repeatOf + 1}</b></div>}
       </div>
       {p.ann.error && <div className="alert-err mono" style={{ marginBottom: 12 }}>{p.ann.error}</div>}
       {visible.map(([label, v]) => (
@@ -178,7 +188,7 @@ function StepDetail({ p }: { p: Placed }) {
       ))}
       {s.raw !== undefined && (
         <details style={{ marginTop: 12 }}>
-          <summary className="faint" style={{ cursor: 'pointer', fontSize: 12.5 }}>Raw payload from the source</summary>
+          <summary className="faint" style={{ cursor: 'pointer', fontSize: 12.5 }}>{fr ? 'Payload brut de la source' : 'Raw payload from the source'}</summary>
           <pre className="code" style={{ marginTop: 8 }}>{pretty(s.raw)}</pre>
         </details>
       )}

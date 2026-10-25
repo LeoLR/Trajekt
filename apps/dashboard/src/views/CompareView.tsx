@@ -3,13 +3,14 @@ import type { ComparePageData } from '../server/pages';
 import { RunStatus, Shell } from '../components/ui';
 import { stepTitle } from '../lib/format';
 import { formatCost, formatDuration, shortId } from '../lib/format';
+import { getLang, tr } from '../lib/i18n';
 
-const MARK_STYLE: Record<DiffRow['mark'], { color: string; label: string }> = {
-  '=': { color: 'var(--text-4)', label: 'same' },
-  '≠': { color: 'var(--amber)', label: 'changed' },
-  '+': { color: 'var(--amber)', label: 'only in B' },
-  '−': { color: 'var(--err-text)', label: 'only in A' },
-};
+const MARK_STYLE = (): Record<DiffRow['mark'], { color: string; label: string }> => ({
+  '=': { color: 'var(--text-4)', label: tr('same', 'identique') },
+  '≠': { color: 'var(--amber)', label: tr('changed', 'modifié') },
+  '+': { color: 'var(--amber)', label: tr('only in B', 'seulement dans B') },
+  '−': { color: 'var(--err-text)', label: tr('only in A', 'seulement dans A') },
+});
 
 function StepCell({ s }: { s?: TrajectoryStep }) {
   if (!s) return <td className="faint">—</td>;
@@ -32,29 +33,31 @@ function pct(a: number | null | undefined, b: number | null | undefined): string
 
 export function CompareView({ data }: { data: ComparePageData }) {
   const { a, b, diff } = data;
+  const MARKS = MARK_STYLE();
+  const fr = getLang() === 'fr';
   const A = a.summary;
   const B = b.summary;
   const config: Array<[string, string | null, string | null]> = [
-    ['App version', A.appVersion, B.appVersion],
-    ['Agent version', A.agentVersion, B.agentVersion],
-    ['Prompt version', A.promptVersion, B.promptVersion],
-    ['Model', A.primaryModel, B.primaryModel],
+    [tr('App version', 'Version d’app'), A.appVersion, B.appVersion],
+    [tr('Agent version', 'Version d’agent'), A.agentVersion, B.agentVersion],
+    [tr('Prompt version', 'Version de prompt'), A.promptVersion, B.promptVersion],
+    [tr('Model', 'Modèle'), A.primaryModel, B.primaryModel],
   ];
   const changedConfig = config.filter(([, x, y]) => (x ?? '') !== (y ?? ''));
   const reason = {
     explicit: null,
-    'previous-version': 'B is compared with the latest successful run of the previous version.',
-    'previous-run': 'B is compared with the previous run of the same agent.',
+    'previous-version': tr('B is compared with the latest successful run of the previous version.', 'B est comparé au dernier run réussi de la version précédente.'),
+    'previous-run': tr('B is compared with the previous run of the same agent.', 'B est comparé au run précédent du même agent.'),
   }[data.baselineReason];
 
   return (
     <Shell active="runs">
       <div className="crumbs">
-        <a href="/">Agents</a> / <a className="mono" href={`/agents/${encodeURIComponent(B.agentName)}`}>{B.agentName}</a> / <a className="mono" href={`/runs/${B.id}`}>run_{shortId(B.id)}</a> / compare
+        <a href="/">Agents</a> / <a className="mono" href={`/agents/${encodeURIComponent(B.agentName)}`}>{B.agentName}</a> / <a className="mono" href={`/runs/${B.id}`}>run_{shortId(B.id)}</a> / {tr('compare', 'comparaison')}
       </div>
       <div className="page-head">
         <div>
-          <h1>Compare runs</h1>
+          <h1>{tr('Compare runs', 'Comparer deux runs')}</h1>
           {reason && <p className="dim" style={{ margin: '6px 0 0' }}>{reason}</p>}
         </div>
       </div>
@@ -76,13 +79,15 @@ export function CompareView({ data }: { data: ComparePageData }) {
       </div>
 
       <p className="mono" style={{ marginTop: 16, fontSize: 13 }}>
-        steps {A.stepCount} → {B.stepCount} · cost {pct(A.costUsd, B.costUsd)} · duration {pct(A.durationMs, B.durationMs)} · outcome {B.status === 'ok' ? 'succeeded' : 'failed'}
+        {fr
+          ? `steps ${A.stepCount} → ${B.stepCount} · coût ${pct(A.costUsd, B.costUsd)} · durée ${pct(A.durationMs, B.durationMs)} · résultat ${B.status === 'ok' ? 'réussi' : 'échec'}`
+          : `steps ${A.stepCount} → ${B.stepCount} · cost ${pct(A.costUsd, B.costUsd)} · duration ${pct(A.durationMs, B.durationMs)} · outcome ${B.status === 'ok' ? 'succeeded' : 'failed'}`}
       </p>
 
       <section className="section">
-        <h2>What changed between them</h2>
+        <h2>{tr('What changed between them', 'Ce qui a changé entre les deux')}</h2>
         {changedConfig.length === 0 ? (
-          <p className="faint">Same app version, agent version, prompt version and model.</p>
+          <p className="faint">{tr('Same app version, agent version, prompt version and model.', 'Mêmes versions d’app, d’agent et de prompt, même modèle.')}</p>
         ) : (
           <div className="panel table-wrap">
             <table>
@@ -98,11 +103,11 @@ export function CompareView({ data }: { data: ComparePageData }) {
 
       <section className="section">
         <div className="row" style={{ marginBottom: 12 }}>
-          <h2 style={{ margin: 0 }}>Step by step</h2>
+          <h2 style={{ margin: 0 }}>{tr('Step by step', 'Étape par étape')}</h2>
           <span className="spacer" />
           {(['=', '≠', '+', '−'] as const).map((m) => (
             <span key={m} className="faint mono" style={{ fontSize: 12 }}>
-              <span style={{ color: MARK_STYLE[m].color }}>{m}</span> {MARK_STYLE[m].label} ({diff.counts[m]})
+              <span style={{ color: MARKS[m].color }}>{m}</span> {MARKS[m].label} ({diff.counts[m]})
             </span>
           ))}
         </div>
@@ -112,18 +117,18 @@ export function CompareView({ data }: { data: ComparePageData }) {
             <tbody>
               {diff.rows.map((r, i) => (
                 <tr key={i} className={r.mark === '=' ? undefined : 'is-regression'}>
-                  <td className="mono" style={{ color: MARK_STYLE[r.mark].color, fontWeight: 600, textAlign: 'center' }} aria-label={MARK_STYLE[r.mark].label}>{r.mark}</td>
+                  <td className="mono" style={{ color: MARKS[r.mark].color, fontWeight: 600, textAlign: 'center' }} aria-label={MARKS[r.mark].label}>{r.mark}</td>
                   <StepCell s={r.a} />
                   <td>
                     {r.b ? <StepCell.Inner s={r.b} /> : <span className="faint">—</span>}
-                    {r.changes && <span className="faint mono" style={{ fontSize: 11.5, marginLeft: 8 }}>{r.changes.join(', ')} changed</span>}
+                    {r.changes && <span className="faint mono" style={{ fontSize: 11.5, marginLeft: 8 }}>{r.changes.join(', ')} {tr('changed', fr && r.changes.length > 1 ? 'modifiés' : 'modifié')}</span>}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p className="faint" style={{ fontSize: 12, marginTop: 8 }}>System spans are left out; steps are aligned on the tool called (or LLM call), then compared on arguments and outcome.</p>
+        <p className="faint" style={{ fontSize: 12, marginTop: 8 }}>{tr('System spans are left out; steps are aligned on the tool called (or LLM call), then compared on arguments and outcome.', 'Les spans système sont écartés ; les steps sont alignés sur l’outil appelé (ou l’appel LLM), puis comparés sur les arguments et le résultat.')}</p>
       </section>
     </Shell>
   );

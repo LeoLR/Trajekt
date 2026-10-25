@@ -1,5 +1,8 @@
 import { ExploreView } from '../../views/ExploreView';
+import { requestLang } from '../context';
 
-export default function ExplorePage() {
-  return <ExploreView />;
+export const dynamic = 'force-dynamic';
+
+export default async function ExplorePage() {
+  return <ExploreView lang={await requestLang()} />;
 }

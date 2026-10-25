@@ -11,8 +11,10 @@ import { annotateSteps, computeMetrics, normalizeAll, type Trajectory } from '@t
 import { Shell } from '../components/ui';
 import { RunTimeline } from '../components/RunTimeline';
 import { formatCost, formatDuration } from '../lib/format';
+import type { Lang } from '../lib/i18n';
 
-export function ExploreView() {
+export function ExploreView({ lang = 'en' }: { lang?: Lang }) {
+  const fr = lang === 'fr';
   const [runs, setRuns] = useState<Trajectory[]>([]);
   const [selected, setSelected] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -24,23 +26,23 @@ export function ExploreView() {
         const out = normalizeAll(JSON.parse(text));
         setRuns(out);
         setSelected(0);
-        setError(out.length ? null : 'No trace found in this file.');
+        setError(out.length ? null : fr ? 'Aucune trace trouvée dans ce fichier.' : 'No trace found in this file.');
       } catch (e) {
         setRuns([]);
-        setError(e instanceof Error ? e.message : 'Could not read this file.');
+        setError(e instanceof SyntaxError ? (fr ? 'Ce fichier n’est pas du JSON valide.' : 'This file is not valid JSON.') : e instanceof Error ? e.message : fr ? 'Impossible de lire ce fichier.' : 'Could not read this file.');
       }
     });
-  }, []);
+  }, [fr]);
 
   const t = runs[selected];
   const m = t ? computeMetrics(t) : null;
 
   return (
-    <Shell active="explore">
+    <Shell active="explore" lang={lang}>
       <div className="page-head">
         <div>
-          <div className="eyebrow">Local · nothing is uploaded</div>
-          <h1>Open a trace</h1>
+          <div className="eyebrow">{fr ? 'En local · rien n’est envoyé' : 'Local · nothing is uploaded'}</div>
+          <h1>{fr ? 'Ouvrir une trace' : 'Open a trace'}</h1>
         </div>
       </div>
       <label
@@ -51,13 +53,13 @@ export function ExploreView() {
         style={{ display: 'block', cursor: 'pointer' }}
       >
         <input type="file" accept="application/json,.json" className="sr-only" onChange={(e: { target: HTMLInputElement }) => { const f = e.target.files?.[0]; if (f) load(f); }} />
-        <strong style={{ color: 'var(--text)' }}>Drop a JSON trace here, or click to choose a file</strong>
-        <div className="faint" style={{ marginTop: 4, fontSize: 13 }}>Langfuse trace export · OTLP/JSON · Vercel AI SDK result · Trajekt trajectory</div>
+        <strong style={{ color: 'var(--text)' }}>{fr ? 'Déposez une trace JSON ici, ou cliquez pour choisir un fichier' : 'Drop a JSON trace here, or click to choose a file'}</strong>
+        <div className="faint" style={{ marginTop: 4, fontSize: 13 }}>{fr ? 'Export de trace Langfuse · OTLP/JSON · résultat Vercel AI SDK · trajectoire Trajekt' : 'Langfuse trace export · OTLP/JSON · Vercel AI SDK result · Trajekt trajectory'}</div>
       </label>
       {error && <div className="alert-err" style={{ marginTop: 16 }}>{error}</div>}
       {runs.length > 1 && (
         <div className="row" style={{ marginTop: 16 }}>
-          <span className="faint">{runs.length} traces in this file:</span>
+          <span className="faint">{runs.length} {fr ? 'traces dans ce fichier :' : 'traces in this file:'}</span>
           {runs.map((r, i) => (
             <button key={r.id} type="button" className={i === selected ? 'chip chip-amber' : 'chip'} style={{ cursor: 'pointer', background: 'none', minHeight: 32 }} onClick={() => setSelected(i)}>
               {(r.metadata.traceId ?? r.id).slice(0, 8)}
@@ -71,8 +73,9 @@ export function ExploreView() {
             key={t.id}
             trajectory={t}
             annotations={annotateSteps(t)}
+            lang={lang}
             header={{
-              left: `${t.metadata.agentName ?? 'unknown agent'} · ${t.metadata.sourceFormat ?? ''}`,
+              left: `${t.metadata.agentName ?? (fr ? 'agent inconnu' : 'unknown agent')} · ${t.metadata.sourceFormat ?? ''}`,
               right: `${formatDuration(m.durationMs)} · ${formatCost(m.costUsd, m.costEstimated)}`,
             }}
           />

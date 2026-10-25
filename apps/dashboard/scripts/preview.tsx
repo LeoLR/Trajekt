@@ -3,7 +3,7 @@
  * sans lancer Next.js — pour les captures d'écran de la doc et pour
  * vérifier l'interface en CI.
  *
- *   TEST_PG_PORT=5432 tsx --tsconfig tsconfig.test.json scripts/preview.tsx out/
+ *   TEST_PG_PORT=5432 tsx --tsconfig tsconfig.test.json scripts/preview.tsx out/ [en|fr]
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -26,13 +26,16 @@ import { RunView } from '../src/views/RunView';
 import { LoginView } from '../src/views/LoginView';
 import { CompareView } from '../src/views/CompareView';
 import { loadComparePage } from '../src/server/pages';
+import { isLang, setDefaultLang } from '../src/lib/i18n';
 
 const out = process.argv[2] ?? 'preview';
+const lang = isLang(process.argv[3]) ? process.argv[3] : 'en';
+setDefaultLang(lang);
 const now = new Date();
 
 async function main() {
   const css = await readFile(path.join(import.meta.dirname, '..', 'src', 'app', 'globals.css'), 'utf8');
-  const page = (el: ReactElement) => `<!doctype html><html lang="en"><head><meta charset="utf-8">
+  const page = (el: ReactElement) => `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>${css}</style></head><body>${renderToStaticMarkup(el)}</body></html>`;
