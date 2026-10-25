@@ -53,6 +53,11 @@ interface ExistingRow {
 
 const UNKNOWN_AGENT = 'unknown';
 
+/** JSONB relu : objet normalement, chaîne si une ancienne ligne a été doublement encodée. */
+export function asJson<T>(v: T | string): T {
+  return typeof v === 'string' ? (JSON.parse(v) as T) : v;
+}
+
 function applyDefaults(t: Trajectory, d: IdentityDefaults): Trajectory {
   const m = t.metadata;
   return {
@@ -92,8 +97,8 @@ async function persist(db: Db, projectId: string, incoming: Trajectory): Promise
             schemaVersion: SCHEMA_VERSION,
             id: existing.id,
             source: existing.source,
-            steps: existing.steps,
-            metadata: existing.metadata,
+            steps: asJson(existing.steps),
+            metadata: asJson(existing.metadata),
             createdAt: existing.created_at.toISOString(),
           },
           incoming,
@@ -141,7 +146,7 @@ async function persist(db: Db, projectId: string, incoming: Trajectory): Promise
       input_tokens, output_tokens, cost_usd, cost_estimated, redundant_tool_calls,
       retry_count, path_signature, steps, metadata, app_version`;
     const placeholders = `$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::timestamptz, $13,
-      $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26::jsonb, $27::jsonb, $28`;
+      $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26::text::jsonb, $27::text::jsonb, $28`;
 
     const [row] = existing
       ? await tx.query<{ id: string; created_at: Date }>(

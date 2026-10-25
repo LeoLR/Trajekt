@@ -12,6 +12,7 @@
 
 import { METRIC_LABELS, type Comparison } from '@trajekt/core';
 import type { Db } from './db';
+import { asJson } from './ingest';
 import { agentVersions, compareLatestVersions, compareRecentWindow, type ComparisonResult } from './queries';
 import { formatDelta, formatMetric } from '../lib/format';
 
@@ -100,7 +101,7 @@ export async function checkRegressions(db: Db, projectId: string, o: CheckOption
     }
     await db.query(
       `insert into alerts (project_id, agent_name, mode, metric, severity, baseline, current, rel_delta, detail, context, created_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::timestamptz)`,
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text::jsonb, $11::timestamptz)`,
       [
         projectId, a.agentName, a.mode, a.comparison.metric, a.comparison.severity ?? 'warning',
         a.comparison.baseline, a.comparison.current, a.comparison.relDelta, a.comparison.detail ?? null,
@@ -157,7 +158,7 @@ export async function recentAlerts(db: Db, projectId: string, opts: { agent?: st
     params,
   );
   return rows.map((r) => {
-    const ctx = (r.context ?? {}) as Record<string, unknown>;
+    const ctx = (asJson(r.context as Record<string, unknown> | string) ?? {}) as Record<string, unknown>;
     return {
       id: String(r.id),
       agentName: String(r.agent_name),

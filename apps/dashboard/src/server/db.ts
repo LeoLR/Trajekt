@@ -8,7 +8,9 @@
  * Conventions pour que les types soient stables quel que soit le driver :
  *   - compter avec ::int, moyenner avec ::float8 ;
  *   - passer les dates en ISO et caster (::timestamptz) ;
- *   - passer le JSON en chaîne et caster (::jsonb).
+ *   - passer le JSON en chaîne et caster via text (::text::jsonb) : le
+ *     driver postgres connaît le type des paramètres et ré-encoderait en
+ *     JSON une chaîne passée directement à un paramètre jsonb.
  */
 
 import postgres from 'postgres';

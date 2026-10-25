@@ -14,6 +14,7 @@ import {
   type Trajectory,
 } from '@trajekt/core';
 import type { Db } from './db';
+import { asJson } from './ingest';
 
 /* ------------------------------------------------------------------ */
 /* Types renvoyés                                                       */
@@ -594,8 +595,8 @@ export async function getRun(db: Db, projectId: string, id: string): Promise<Run
       schemaVersion: Number(r.schema_version) as 1,
       id: String(r.id),
       source: r.source as Trajectory['source'],
-      steps: r.steps as Trajectory['steps'],
-      metadata: r.metadata as Trajectory['metadata'],
+      steps: asJson(r.steps as Trajectory['steps']),
+      metadata: asJson(r.metadata as Trajectory['metadata']),
       createdAt: iso(r.created_at as Date),
     },
   };

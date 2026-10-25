@@ -141,8 +141,42 @@ export class PgWire implements Db {
     }
   }
 
+  /**
+   * Types des paramètres tels que le serveur les infère (Parse + Describe),
+   * comme le fait le driver postgres avant d'envoyer les valeurs.
+   */
+  private async describeParams(text: string): Promise<number[]> {
+    const parseBody = Buffer.concat([Buffer.from('\0' + text + '\0'), Buffer.from([0, 0])]);
+    const describeBody = Buffer.from('S\0');
+    this.socket.write(Buffer.concat([
+      Buffer.from('P'), int32(parseBody.length + 4), parseBody,
+      Buffer.from('D'), int32(describeBody.length + 4), describeBody,
+      Buffer.from('S'), int32(4),
+    ]));
+    let oids: number[] = [];
+    let error: Error | null = null;
+    for (;;) {
+      const { type, body } = await this.nextMessage();
+      if (type === 't') {
+        oids = [];
+        for (let i = 0; i < body.readInt16BE(0); i++) oids.push(body.readInt32BE(2 + i * 4));
+      } else if (type === 'E') {
+        error = new Error('describe failed: ' + body.toString('utf8').replace(/\0/g, ' '));
+      } else if (type === 'Z') {
+        if (error) throw error;
+        return oids;
+      }
+    }
+  }
+
   query<T = Record<string, unknown>>(text: string, params: unknown[] = []): Promise<T[]> {
     const run = async () => {
+      if (params.length) {
+        // Comme le driver postgres : un paramètre de type json/jsonb est
+        // encodé avec JSON.stringify, même s'il s'agit déjà d'une chaîne.
+        const oids = await this.describeParams(text);
+        params = params.map((v, i) => ((oids[i] === 114 || oids[i] === 3802) && v !== null && v !== undefined ? JSON.stringify(v) : v));
+      }
       const sql = interpolate(text, params);
       const body = Buffer.from(sql + '\0');
       this.socket.write(Buffer.concat([Buffer.from('Q'), int32(body.length + 4), body]));
