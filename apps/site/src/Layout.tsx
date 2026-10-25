@@ -50,19 +50,46 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
 
 /** En-tête commun. Sur la page de doc, les ancres de la landing pointent vers "/". */
 export function Header({ page }: { page: 'home' | 'docs' }) {
+  const [open, setOpen] = useState(false);
   const home = page === 'home' ? '' : '/';
+  const links: Array<[string, string, boolean]> = [
+    [`${home}#how`, 'How it works', false],
+    [`${home}#try`, 'Try it', false],
+    [DOCS_URL, 'Docs', page === 'docs'],
+    [REPO_URL, 'GitHub', false],
+  ];
+  const close = () => setOpen(false);
   return (
     <header className="header">
       <div className="container header-inner">
         <a href="/" aria-label="Trajekt home"><Logo /></a>
         <nav className="header-nav" aria-label="Main">
-          <a href={`${home}#how`}>How it works</a>
-          <a href={`${home}#try`}>Try it</a>
-          <a href={DOCS_URL} aria-current={page === 'docs' ? 'page' : undefined}>Docs</a>
-          <a href={REPO_URL}>GitHub</a>
+          {links.map(([href, label, current]) => (
+            <a key={label} href={href} aria-current={current ? 'page' : undefined}>{label}</a>
+          ))}
         </nav>
-        <a className="btn btn-amber" href={QUICKSTART_URL}>Get started</a>
+        <a className="btn btn-amber header-cta" href={QUICKSTART_URL}>Get started</a>
+        <button
+          type="button"
+          className="menu-toggle"
+          aria-expanded={open}
+          aria-controls="mobile-menu"
+          aria-label={open ? 'Close menu' : 'Open menu'}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            {open ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
+          </svg>
+        </button>
       </div>
+      <nav id="mobile-menu" className="mobile-menu" aria-label="Main (mobile)" hidden={!open}>
+        <div className="container">
+          {links.map(([href, label, current]) => (
+            <a key={label} href={href} onClick={close} aria-current={current ? 'page' : undefined}>{label}</a>
+          ))}
+          <a className="btn btn-amber" href={QUICKSTART_URL} onClick={close}>Get started</a>
+        </div>
+      </nav>
     </header>
   );
 }
