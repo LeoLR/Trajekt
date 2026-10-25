@@ -86,7 +86,10 @@ jobs:
           npx playwright install --with-deps chromium
       - name: End-to-end tests
         working-directory: e2e
-        run: npm test
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee /tmp/e2e.out
+          echo "::notice title=e2e::$(grep -E '^# (tests|pass|fail)' /tmp/e2e.out | tr '\n' ' ')"
       - name: Server log
         if: failure()
         run: tail -200 /tmp/next.log

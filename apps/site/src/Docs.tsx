@@ -657,6 +657,9 @@ pnpm --filter dashboard test
           <p>
             <C>TEST_PG_HOST</C>, <C>TEST_PG_PORT</C> and <C>TEST_PG_USER</C> change the target (defaults: <C>127.0.0.1</C>, <C>54329</C>, <C>postgres</C>). <C>pnpm --filter dashboard preview</C> renders every dashboard page with simulated data into static HTML files, without Next.js.
           </p>
+          <p>
+            End-to-end tests run the built app (<C>next start</C>) in a real browser with Playwright: sign-in, every page, project creation, ingestion in JSON and protobuf, scores, redaction and MCP. They live in <C>e2e/</C>; the CI workflow shows how to start the app before running <C>npm test</C> there.
+          </p>
 
           {/* ------------------------------------------------------------ */}
           <H2 id="api">API reference</H2>
