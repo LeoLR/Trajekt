@@ -30,8 +30,8 @@ const problems = [];
 before(async () => {
   browser = await chromium.launch();
   page = await browser.newPage();
-  page.on('console', (m) => m.type() === 'error' && problems.push(`console: ${m.text()}`));
-  page.on('pageerror', (e) => problems.push(`page error: ${e.message}`));
+  page.on('console', (m) => m.type() === 'error' && problems.push(`console (${page.url()}): ${m.text()}`));
+  page.on('pageerror', (e) => problems.push(`page error (${page.url()}): ${e.message.slice(0, 160)}`));
 });
 after(async () => browser?.close());
 
