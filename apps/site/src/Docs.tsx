@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { CopyButton, Page, REPO_URL } from './Layout';
+import { CopyButton, DEMO_URL, Page, REPO_URL } from './Layout';
 
 /**
  * Documentation : installation, envoi de traces, utilisation, tests.
@@ -14,6 +14,7 @@ const SECTIONS: Array<[string, string, Array<[string, string]>?]> = [
   ['send', 'Sending traces', [['send-otel', 'OpenTelemetry'], ['send-ai-sdk', 'Vercel AI SDK'], ['send-file', 'Langfuse & files'], ['identity', 'Agent, versions & model']]],
   ['dashboard', 'Using the dashboard', [['compare-versions', 'Comparing versions']]],
   ['regressions', 'Regression alerts'],
+  ['ai', 'Ask your agents (MCP)', [['read-keys', 'Read API keys'], ['mcp-tools', 'Tools']]],
   ['library', '@trajekt/core'],
   ['testing', 'Testing', [['test-agent', 'Test your agent'], ['test-trajekt', 'Test Trajekt itself']]],
   ['api', 'API reference'],
@@ -304,6 +305,60 @@ docker compose exec dashboard pnpm check-regressions
 `}</Code>
 
           {/* ------------------------------------------------------------ */}
+          <H2 id="ai">Ask your agents (MCP)</H2>
+          <p>
+            Trajekt is an MCP server. Connect Claude, Cursor or your own agent to it and ask in plain language: <em>"did sentry-triage get worse since prompt v8?"</em>, <em>"why did this run fail?"</em>, <em>"is the cheaper model good enough?"</em>.
+          </p>
+          <p>
+            The tools return answers Trajekt has already computed — statistical verdicts, run summaries, differences — as short text plus structured JSON. Your agent never has to read thousands of spans, so its answers stay short and grounded in the numbers. All tools are read-only.
+          </p>
+          <Code label="Claude Code">{`
+claude mcp add --transport http trajekt http://localhost:3000/api/mcp \\
+  --header "Authorization: Bearer tk_read_..."
+`}</Code>
+          <Code lang="json" label="any MCP client (Streamable HTTP)">{`
+{
+  "mcpServers": {
+    "trajekt": {
+      "type": "http",
+      "url": "http://localhost:3000/api/mcp",
+      "headers": { "Authorization": "Bearer tk_read_..." }
+    }
+  }
+}
+`}</Code>
+          <p>
+            Try it without installing anything: the <a href={DEMO_URL}>live demo</a> exposes its MCP endpoint without a key at <C>{`${DEMO_URL}/api/mcp`}</C>.
+          </p>
+
+          <H3 id="read-keys">Read API keys</H3>
+          <p>
+            Keys have a scope. An ingestion key (<C>tk_live_…</C>) can only send traces; a read key (<C>tk_read_…</C>) can only read — the MCP server and every <C>GET /api/*</C> route. Give agents a read key, never your ingestion key.
+          </p>
+          <Code>{`
+docker compose exec dashboard pnpm create-read-key claude-desktop
+`}</Code>
+
+          <H3 id="mcp-tools">Tools</H3>
+          <div className="doc-table-wrap">
+            <table className="doc-table">
+              <thead><tr><th>Tool</th><th>Answers</th></tr></thead>
+              <tbody>
+                <tr><td><C>list_agents</C></td><td>Which agents exist, their activity over 24 h, and which ones regressed. The starting point.</td></tr>
+                <tr><td><C>list_versions</C></td><td>App versions, agent versions, prompt versions or models of an agent, with their metrics.</td></tr>
+                <tr><td><C>compare</C></td><td>Is B worse than A? Two values of any dimension, the latest against the previous one, or the last 24 h against the 7 days before — one verdict per metric.</td></tr>
+                <tr><td><C>get_regressions</C></td><td>Regressions detected now, and the alerts already sent.</td></tr>
+                <tr><td><C>find_runs</C></td><td>Recent runs by agent, status, versions, model, or repeated tool calls.</td></tr>
+                <tr><td><C>explain_run</C></td><td>What a run did: tool path, and the steps that failed, were retried or repeated, with their arguments.</td></tr>
+                <tr><td><C>diff_runs</C></td><td>Two runs aligned step by step, and the configuration that changed between them.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            There is deliberately no free-form query tool: traces contain customer data, and an agent writing its own SQL is both fragile and risky. A plain-text summary of these docs for agents is at <a href="/llms.txt">/llms.txt</a>.
+          </p>
+
+          {/* ------------------------------------------------------------ */}
           <H2 id="library">@trajekt/core</H2>
           <Note tone="warn">
             <C>@trajekt/core</C> is not published on npm yet. Until it is, build it from the repository and install it by path: <C>pnpm --filter @trajekt/core build</C>, then <C>npm i ../trajekt/packages/core</C> from your project.
@@ -378,18 +433,20 @@ pnpm --filter dashboard test
 
           {/* ------------------------------------------------------------ */}
           <H2 id="api">API reference</H2>
+          <p>Read routes accept the dashboard session or a read key: <C>Authorization: Bearer tk_read_…</C>.</p>
           <div className="doc-table-wrap">
             <table className="doc-table">
               <thead><tr><th>Endpoint</th><th>Auth</th><th>Purpose</th></tr></thead>
               <tbody>
                 <tr><td><C>POST /v1/traces</C></td><td>API key</td><td>Ingest OTLP/JSON, a Langfuse trace, an AI SDK result or a trajectory. Returns the runs created or completed.</td></tr>
-                <tr><td><C>GET /api/agents</C></td><td>session</td><td>One summary per agent.</td></tr>
-                <tr><td><C>GET /api/agents/:name/timeseries</C></td><td>session</td><td><C>from</C>, <C>to</C>, <C>bucket=hour|day</C>, <C>version</C>.</td></tr>
-                <tr><td><C>GET /api/agents/:name/versions</C></td><td>session</td><td>Metrics per value of <C>dimension=app|agent|prompt|model</C> (default <C>agent</C>).</td></tr>
-                <tr><td><C>GET /api/agents/:name/compare</C></td><td>session</td><td><C>mode=window</C>, <C>mode=version&amp;dimension=…</C>, or <C>mode=ab&amp;dimension=…&amp;a=…&amp;b=…</C> with optional <C>from</C>, <C>to</C>.</td></tr>
-                <tr><td><C>GET /api/runs</C></td><td>session</td><td><C>agent</C>, <C>appVersion</C>, <C>version</C>, <C>promptVersion</C>, <C>model</C>, <C>status</C>, <C>loops=1</C>, <C>from</C>, <C>to</C>, <C>limit</C>, <C>cursor</C>.</td></tr>
-                <tr><td><C>GET /api/runs/:id</C></td><td>session</td><td>Run metrics and the full trajectory.</td></tr>
-                <tr><td><C>GET /api/alerts</C></td><td>session</td><td>Alerts sent, newest first.</td></tr>
+                <tr><td><C>GET /api/agents</C></td><td>read</td><td>One summary per agent.</td></tr>
+                <tr><td><C>GET /api/agents/:name/timeseries</C></td><td>read</td><td><C>from</C>, <C>to</C>, <C>bucket=hour|day</C>, <C>version</C>.</td></tr>
+                <tr><td><C>GET /api/agents/:name/versions</C></td><td>read</td><td>Metrics per value of <C>dimension=app|agent|prompt|model</C> (default <C>agent</C>).</td></tr>
+                <tr><td><C>GET /api/agents/:name/compare</C></td><td>read</td><td><C>mode=window</C>, <C>mode=version&amp;dimension=…</C>, or <C>mode=ab&amp;dimension=…&amp;a=…&amp;b=…</C> with optional <C>from</C>, <C>to</C>.</td></tr>
+                <tr><td><C>GET /api/runs</C></td><td>read</td><td><C>agent</C>, <C>appVersion</C>, <C>version</C>, <C>promptVersion</C>, <C>model</C>, <C>status</C>, <C>loops=1</C>, <C>from</C>, <C>to</C>, <C>limit</C>, <C>cursor</C>.</td></tr>
+                <tr><td><C>GET /api/runs/:id</C></td><td>read</td><td>Run metrics and the full trajectory.</td></tr>
+                <tr><td><C>GET /api/alerts</C></td><td>read</td><td>Alerts sent, newest first.</td></tr>
+                <tr><td><C>POST /api/mcp</C></td><td>read key</td><td>MCP server (Streamable HTTP, JSON responses).</td></tr>
                 <tr><td><C>POST /api/alerts/check</C></td><td><C>CRON_SECRET</C></td><td>Run the regression check (also <C>GET</C>, for Vercel Cron).</td></tr>
               </tbody>
             </table>

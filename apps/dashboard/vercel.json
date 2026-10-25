@@ -2,5 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "cd ../.. && npx --yes pnpm@10.28.0 install --no-frozen-lockfile --filter dashboard...",
-  "buildCommand": "npx --yes pnpm@10.28.0 --filter @trajekt/core build && npx --yes pnpm@10.28.0 run vercel-build"
+  "buildCommand": "npx --yes pnpm@10.28.0 --filter @trajekt/core build && npx --yes pnpm@10.28.0 run vercel-build",
+  "regions": [
+    "fra1"
+  ]
 }

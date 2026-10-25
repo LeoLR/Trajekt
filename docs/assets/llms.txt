@@ -1,0 +1,31 @@
+# Trajekt
+
+> Trajekt is an open-source, self-hosted flight recorder for AI agents. It records every run of an agent (steps, tool calls with arguments and results, tokens, latency, cost), replays runs step by step, compares versions (app, agent, prompt, model) and detects regressions. One Postgres, one Docker Compose file.
+
+## Key facts
+
+- Ingestion: `POST /v1/traces` with an ingestion key (`Authorization: Bearer tk_live_…`). Accepts OTLP/HTTP JSON (OpenTelemetry GenAI semantic conventions, Vercel AI SDK telemetry), Langfuse trace exports, Vercel AI SDK `generateText` results and Trajekt trajectories. Not supported: OTLP protobuf, gRPC.
+- Each run carries an agent name and four comparison dimensions: app version (`service.version`), agent version (`trajekt.agent.version`, defaults to the app version), prompt version (`trajekt.prompt.version`) and model (read from LLM calls).
+- Per-run metrics: status, duration, cost (from the source or estimated from tokens), steps, tool calls, failed tool calls, repeated tool calls (same tool, same arguments as an earlier successful call), retries, tool path.
+- A regression is flagged only when the change is statistically significant (one-sided test, p < 0.01), large enough (+15% on a mean, +3 points on a rate), with at least 20 runs on each side.
+
+## MCP server (read-only)
+
+Endpoint: `POST /api/mcp` (Streamable HTTP, JSON responses), with a read key (`Authorization: Bearer tk_read_…`). The public demo at https://trajekt-demo.vercel.app/api/mcp needs no key.
+
+Tools:
+- `list_agents` — agents, 24 h activity, health, current regressions. Start here.
+- `list_versions(agent, dimension)` — values of app | agent | prompt | model with their metrics.
+- `compare(agent, dimension?, a?, b?, mode?)` — B vs A on eight metrics, one verdict each; without a/b, latest vs previous; mode "window" = last 24 h vs previous 7 days.
+- `get_regressions(agent?)` — regressions detected now and alerts sent.
+- `find_runs(agent?, status?, app_version?, agent_version?, prompt_version?, model?, repeated_tool_calls_only?, limit?)`
+- `explain_run(run_id)` — tool path and the failed, retried or repeated steps.
+- `diff_runs(run_id, with_run_id?)` — two runs aligned step by step, and the configuration that changed.
+
+Report the numbers the tools return; do not recompute them.
+
+## Docs
+
+- [Documentation](https://trajekt-eight.vercel.app/docs/): install, send traces, dashboard, regressions, MCP, @trajekt/core, testing, API
+- [API contract](https://github.com/LeoLR/trajekt/blob/main/docs/api-contract.md)
+- [Live demo](https://trajekt-demo.vercel.app)

@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 export const REPO_URL = 'https://github.com/LeoLR/trajekt';
 export const DOCS_URL = '/docs/';
 export const QUICKSTART_URL = '/docs/#quickstart';
+export const DEMO_URL = 'https://trajekt-demo.vercel.app';
 export const CHANGELOG_URL = `${REPO_URL}/commits/main`;
 export const LICENSE = 'MIT';
 
@@ -55,6 +56,7 @@ export function Header({ page }: { page: 'home' | 'docs' }) {
   const links: Array<[string, string, boolean]> = [
     [`${home}#how`, 'How it works', false],
     [`${home}#try`, 'Try it', false],
+    [DEMO_URL, 'Live demo', false],
     [DOCS_URL, 'Docs', page === 'docs'],
     [REPO_URL, 'GitHub', false],
   ];
