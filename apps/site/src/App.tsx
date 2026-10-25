@@ -276,11 +276,11 @@ export function App({ lang = 'en' }: { lang?: Lang }) {
             </ol>
             <pre className="code mono" tabIndex={0} aria-label={t.otelLabel}>{lang === 'fr' ? SDK_SNIPPET_FR : SDK_SNIPPET}</pre>
             <p className="code-note">{t.coreNote} <code className="mono">@trajekt/core</code> {t.coreNoteEnd}</p>
-            <pre className="code mono" tabIndex={0} aria-label="@trajekt/core example">{lang === 'fr' ? CORE_SNIPPET_FR : CORE_SNIPPET}</pre>
+            <pre className="code mono" tabIndex={0} aria-label={lang === 'fr' ? 'Exemple @trajekt/core' : '@trajekt/core example'}>{lang === 'fr' ? CORE_SNIPPET_FR : CORE_SNIPPET}</pre>
             <div className="works-with">
               <span>{t.worksWith}</span>
               <span className="tag mono">OpenTelemetry · OTLP/HTTP JSON &amp; protobuf</span>
-              <span className="tag mono">GenAI semantic conventions</span>
+              <span className="tag mono">{lang === 'fr' ? 'Conventions sémantiques GenAI' : 'GenAI semantic conventions'}</span>
               <span className="tag mono">Vercel AI SDK</span>
               <span className="tag mono">OpenInference · LangChain, LlamaIndex</span>
               <span className="tag mono">{t.langfuse}</span>
