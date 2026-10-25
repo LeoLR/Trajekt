@@ -87,9 +87,17 @@ jobs:
       - name: End-to-end tests
         working-directory: e2e
         run: |
-          set -o pipefail
-          npm test 2>&1 | tee /tmp/e2e.out
+          set +e
+          npm test > /tmp/e2e.out 2>&1
+          status=$?
+          cat /tmp/e2e.out
           echo "::notice title=e2e::$(grep -E '^# (tests|pass|fail)' /tmp/e2e.out | tr '\n' ' ')"
+          # Détail des échecs dans les annotations (lisibles sans accès aux logs).
+          grep -n '^not ok\|^  *not ok' /tmp/e2e.out | head -10 | while IFS=: read -r line rest; do
+            detail=$(sed -n "$((line+1)),$((line+25))p" /tmp/e2e.out | grep -E "error:|message|expected|actual|Error" | head -6 | tr '\n' ' ' | cut -c1-900)
+            echo "::error title=e2e $rest::$detail"
+          done
+          exit $status
       - name: Server log
         if: failure()
         run: tail -200 /tmp/next.log
