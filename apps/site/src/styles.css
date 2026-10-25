@@ -58,6 +58,8 @@ p { margin: 0; }
 .header-nav { display: flex; gap: 4px; flex: 1; }
 .header-nav a { white-space: nowrap; color: var(--text-2); padding: 0 12px; min-height: 44px; display: inline-flex; align-items: center; border-radius: 8px; font-size: 15px; }
 .header-nav a:hover { color: var(--text); }
+.header-nav .lang-switch { margin-left: auto; font-size: 13px; letter-spacing: 0.04em; color: var(--text-3); }
+.header-nav .lang-switch:hover { color: var(--amber); }
 /* Menu mobile : sous 720px, les liens passent dans un panneau. */
 .menu-toggle { display: none; align-items: center; justify-content: center; width: 44px; height: 44px; margin-left: auto; border: 1px solid var(--border-strong); border-radius: 9px; background: none; color: var(--text); cursor: pointer; }
 .menu-toggle:hover { border-color: var(--text-4); }

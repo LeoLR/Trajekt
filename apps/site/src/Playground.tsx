@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { useLang } from './Layout';
 import {
   annotateSteps,
   computeMetrics,
@@ -73,6 +74,15 @@ const TYPE_COLOR: Record<TrajectoryStep['type'], string> = {
   decision: 'var(--text-3)',
 };
 
+const TYPE_LABEL_FR: Record<TrajectoryStep['type'], string> = {
+  llm_call: 'Appel LLM',
+  tool_call: 'Appel d’outil',
+  custom: 'Système',
+  user_message: 'Message utilisateur',
+  agent_message: 'Message de l’agent',
+  decision: 'Décision',
+};
+
 const TYPE_LABEL: Record<TrajectoryStep['type'], string> = {
   llm_call: 'LLM call',
   tool_call: 'Tool call',
@@ -101,6 +111,7 @@ function pretty(v: unknown): string {
 /* ------------------------------------------------------------------ */
 
 export function Playground() {
+  const fr = useLang() === 'fr';
   const [loaded, setLoaded] = useState<Loaded>(() => load(SAMPLES[0].data, SAMPLES[0].id, SAMPLES[0].agent));
   const [runIndex, setRunIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
@@ -144,24 +155,36 @@ export function Playground() {
 
   const readFile = useCallback((file: File) => {
     if (file.size > MAX_BYTES) {
-      setError('This file is larger than 5 MB. Try a single trace.');
+      setError(fr ? 'Ce fichier dépasse 5 Mo. Essayez avec une seule trace.' : 'This file is larger than 5 MB. Try a single trace.');
       return;
     }
     file.text().then((text) => {
       try {
         show(load(JSON.parse(text), file.name));
       } catch (e) {
-        setError(e instanceof SyntaxError ? 'This file is not valid JSON.' : e instanceof Error ? e.message : 'Could not read this file.');
+        setError(e instanceof SyntaxError
+          ? (fr ? 'Ce fichier n’est pas du JSON valide.' : 'This file is not valid JSON.')
+          : e instanceof Error
+            ? (fr && e.message === 'No trace found in this file.' ? 'Aucune trace trouvée dans ce fichier.' : e.message)
+            : (fr ? 'Impossible de lire ce fichier.' : 'Could not read this file.'));
       }
     });
-  }, [show]);
+  }, [show, fr]);
 
   const repeats = annotations.filter((a) => a.repeatOf !== undefined);
   const findings: string[] = [];
-  if (repeats.length) findings.push(`${repeats.map((r) => `#${r.index + 1}`).join(' and ')} repeat${repeats.length > 1 ? '' : 's'} an earlier call with identical arguments.`);
-  if (metrics.retryCount) findings.push(`${metrics.retryCount} retr${metrics.retryCount > 1 ? 'ies' : 'y'} after a failure.`);
-  if (metrics.status === 'error') findings.push('The run failed.');
-  if (!findings.length) findings.push('No repeated call, no retry, no failure in this run.');
+  const ids = repeats.map((r) => `#${r.index + 1}`);
+  if (fr) {
+    if (repeats.length) findings.push(`${ids.join(' et ')} répète${repeats.length > 1 ? 'nt' : ''} un appel précédent avec les mêmes arguments.`);
+    if (metrics.retryCount) findings.push(`${metrics.retryCount} relance${metrics.retryCount > 1 ? 's' : ''} après un échec.`);
+    if (metrics.status === 'error') findings.push('Le run a échoué.');
+    if (!findings.length) findings.push('Aucun appel répété, aucune relance, aucun échec dans ce run.');
+  } else {
+    if (repeats.length) findings.push(`${ids.join(' and ')} repeat${repeats.length > 1 ? '' : 's'} an earlier call with identical arguments.`);
+    if (metrics.retryCount) findings.push(`${metrics.retryCount} retr${metrics.retryCount > 1 ? 'ies' : 'y'} after a failure.`);
+    if (metrics.status === 'error') findings.push('The run failed.');
+    if (!findings.length) findings.push('No repeated call, no retry, no failure in this run.');
+  }
 
   return (
     <div
@@ -176,7 +199,7 @@ export function Playground() {
       }}
     >
       <div className="pg-toolbar">
-        <div className="pg-samples" role="group" aria-label="Example traces">
+        <div className="pg-samples" role="group" aria-label={fr ? 'Traces d’exemple' : 'Example traces'}>
           {SAMPLES.map((s) => (
             <button key={s.id} type="button" className="pg-sample" aria-pressed={loaded.source === s.id}
               onClick={() => show(load(s.data, s.id, s.agent))}>
@@ -186,20 +209,22 @@ export function Playground() {
           ))}
         </div>
         <button type="button" className="btn btn-outline pg-open" onClick={() => inputRef.current?.click()}>
-          Open your trace…
+          {fr ? 'Ouvrir votre trace…' : 'Open your trace…'}
         </button>
         <input ref={inputRef} type="file" accept="application/json,.json" className="sr-only" tabIndex={-1} aria-hidden="true"
           onChange={(e: { target: HTMLInputElement }) => { const f = e.target.files?.[0]; if (f) readFile(f); e.target.value = ''; }} />
       </div>
       <p className="pg-hint">
-        Langfuse trace export, OTLP/JSON or a Vercel AI SDK result — drop it anywhere on this panel. It is read in your browser by <code className="mono">@trajekt/core</code>; nothing is uploaded.
+        {fr
+          ? <>Export de trace Langfuse, OTLP/JSON ou résultat du Vercel AI SDK — déposez-le n’importe où sur ce panneau. Il est lu dans votre navigateur par <code className="mono">@trajekt/core</code> ; rien n’est envoyé.</>
+          : <>Langfuse trace export, OTLP/JSON or a Vercel AI SDK result — drop it anywhere on this panel. It is read in your browser by <code className="mono">@trajekt/core</code>; nothing is uploaded.</>}
       </p>
 
       {error && <div className="pg-error" role="alert">{error}</div>}
 
       {loaded.runs.length > 1 && (
         <div className="pg-runs">
-          <span className="muted">{loaded.runs.length} traces in this file:</span>
+          <span className="muted">{loaded.runs.length} {fr ? 'traces dans ce fichier :' : 'traces in this file:'}</span>
           {loaded.runs.slice(0, 12).map((r, i) => (
             <button key={r.id + i} type="button" className="pg-run" aria-pressed={i === runIndex} onClick={() => { setRunIndex(i); setSelected(null); }}>
               {(r.metadata.traceId ?? r.id).slice(0, 8)}
@@ -210,24 +235,24 @@ export function Playground() {
 
       <div className="pg-panel">
         <div className="recorder-bar">
-          <span>AGENT FLIGHT RECORDER · REPLAY</span>
-          <span className={`pg-status ${metrics.status === 'ok' ? 'is-ok' : 'is-err'}`}>{metrics.status === 'ok' ? 'OK' : 'FAILED'}</span>
+          <span>{fr ? 'BOÎTE NOIRE D’AGENT · REPLAY' : 'AGENT FLIGHT RECORDER · REPLAY'}</span>
+          <span className={`pg-status ${metrics.status === 'ok' ? 'is-ok' : 'is-err'}`}>{metrics.status === 'ok' ? 'OK' : fr ? 'ÉCHEC' : 'FAILED'}</span>
         </div>
         <div className="pg-head mono">
-          <span>{run.metadata.agentName ?? 'unknown agent'} · {run.metadata.sourceFormat}{run.metadata.agentVersion ? ` · ${run.metadata.agentVersion}` : ''}</span>
+          <span>{run.metadata.agentName ?? (fr ? 'agent inconnu' : 'unknown agent')} · {run.metadata.sourceFormat}{run.metadata.agentVersion ? ` · ${run.metadata.agentVersion}` : ''}</span>
           <span>{dur(metrics.durationMs)} · {cost(metrics.costUsd, metrics.costEstimated)}</span>
         </div>
         <dl className="pg-metrics">
           <div><dt>Steps</dt><dd className="mono">{metrics.stepCount}</dd></div>
-          <div><dt>Tool calls</dt><dd className="mono">{metrics.toolCallCount}</dd></div>
-          <div><dt>Repeated calls</dt><dd className={`mono${metrics.redundantToolCalls ? ' t-amber' : ''}`}>{metrics.redundantToolCalls}</dd></div>
-          <div><dt>Retries</dt><dd className={`mono${metrics.retryCount ? ' t-amber' : ''}`}>{metrics.retryCount}</dd></div>
-          <div><dt>Tokens</dt><dd className="mono">{(metrics.inputTokens + metrics.outputTokens).toLocaleString('en-US')}</dd></div>
+          <div><dt>{fr ? 'Appels d’outils' : 'Tool calls'}</dt><dd className="mono">{metrics.toolCallCount}</dd></div>
+          <div><dt>{fr ? 'Appels répétés' : 'Repeated calls'}</dt><dd className={`mono${metrics.redundantToolCalls ? ' t-amber' : ''}`}>{metrics.redundantToolCalls}</dd></div>
+          <div><dt>{fr ? 'Relances' : 'Retries'}</dt><dd className={`mono${metrics.retryCount ? ' t-amber' : ''}`}>{metrics.retryCount}</dd></div>
+          <div><dt>Tokens</dt><dd className="mono">{(metrics.inputTokens + metrics.outputTokens).toLocaleString(fr ? 'fr-FR' : 'en-US')}</dd></div>
         </dl>
         <p className="pg-findings">{findings.join(' ')}</p>
 
         <div className="pg-grid">
-          <ol className="pg-timeline" aria-label="Steps of the run">
+          <ol className="pg-timeline" aria-label={fr ? 'Étapes du run' : 'Steps of the run'}>
             {run.steps.map((s, i) => {
               const p = placed.rows[i];
               const left = (p.start / placed.total) * 100;
@@ -256,27 +281,27 @@ export function Playground() {
             <section className="pg-detail" aria-live="polite" aria-label={`Step #${active + 1}`}>
               <div className="pg-detail-head">
                 <span className="mono"><span className="muted">#{active + 1}</span> {title(step)}</span>
-                <span className="pg-type mono">{TYPE_LABEL[step.type]}</span>
+                <span className="pg-type mono">{(fr ? TYPE_LABEL_FR : TYPE_LABEL)[step.type]}</span>
               </div>
               <dl className="pg-kv">
-                <div><dt>Duration</dt><dd className="mono">{dur(step.durationMs)}</dd></div>
-                {placed.timed && <div><dt>Started at</dt><dd className="mono">+{dur(placed.rows[active].start)}</dd></div>}
-                {step.type === 'llm_call' && <div><dt>Tokens in / out</dt><dd className="mono">{step.usage?.inputTokens ?? '—'} / {step.usage?.outputTokens ?? '—'}</dd></div>}
-                {annotations[active]?.repeatOf !== undefined && <div><dt>Same call as</dt><dd className="mono t-amber">#{annotations[active].repeatOf! + 1}</dd></div>}
+                <div><dt>{fr ? 'Durée' : 'Duration'}</dt><dd className="mono">{dur(step.durationMs)}</dd></div>
+                {placed.timed && <div><dt>{fr ? 'Début' : 'Started at'}</dt><dd className="mono">+{dur(placed.rows[active].start)}</dd></div>}
+                {step.type === 'llm_call' && <div><dt>{fr ? 'Tokens entrée / sortie' : 'Tokens in / out'}</dt><dd className="mono">{step.usage?.inputTokens ?? '—'} / {step.usage?.outputTokens ?? '—'}</dd></div>}
+                {annotations[active]?.repeatOf !== undefined && <div><dt>{fr ? 'Même appel que' : 'Same call as'}</dt><dd className="mono t-amber">#{annotations[active].repeatOf! + 1}</dd></div>}
               </dl>
               {annotations[active]?.error && <div className="pg-error mono">{annotations[active].error}</div>}
               {step.type === 'tool_call' && step.args !== undefined && <><div className="pg-label mono">ARGUMENTS</div><pre className="pg-pre mono">{pretty(step.args)}</pre></>}
-              {step.type === 'tool_call' && step.result !== undefined && <><div className="pg-label mono">RESULT</div><pre className="pg-pre mono">{pretty(step.result)}</pre></>}
+              {step.type === 'tool_call' && step.result !== undefined && <><div className="pg-label mono">{fr ? 'RÉSULTAT' : 'RESULT'}</div><pre className="pg-pre mono">{pretty(step.result)}</pre></>}
               {step.type === 'llm_call' && step.input.length > 0 && <><div className="pg-label mono">PROMPT</div><pre className="pg-pre mono">{pretty(step.input.map((m) => `${m.role}: ${m.content}`).join('\n\n'))}</pre></>}
-              {step.type === 'llm_call' && step.output && <><div className="pg-label mono">OUTPUT</div><pre className="pg-pre mono">{pretty(step.output.content)}</pre></>}
-              {step.type === 'custom' && <><div className="pg-label mono">ATTRIBUTES</div><pre className="pg-pre mono">{pretty(step.data)}</pre></>}
+              {step.type === 'llm_call' && step.output && <><div className="pg-label mono">{fr ? 'SORTIE' : 'OUTPUT'}</div><pre className="pg-pre mono">{pretty(step.output.content)}</pre></>}
+              {step.type === 'custom' && <><div className="pg-label mono">{fr ? 'ATTRIBUTS' : 'ATTRIBUTES'}</div><pre className="pg-pre mono">{pretty(step.data)}</pre></>}
             </section>
           )}
         </div>
-        <p className="pg-path mono">tool path: {metrics.pathSignature}</p>
+        <p className="pg-path mono">{fr ? 'chemin d’outils :' : 'tool path:'} {metrics.pathSignature}</p>
       </div>
       <p className="pg-downloads">
-        Example files:{' '}
+        {fr ? 'Fichiers d’exemple :' : 'Example files:'}{' '}
         {SAMPLES.map((s, i) => (
           <span key={s.id}>{i > 0 && ' · '}<a className="mono" href={`/samples/${s.file}`} download>{s.file}</a></span>
         ))}

@@ -2,6 +2,8 @@
   <img src="docs/assets/banner.png" alt="Trajekt — the flight recorder for AI agents" width="100%" />
 </p>
 
+<p align="center"><strong>English</strong> · <a href="README.fr.md">Français</a></p>
+
 <p align="center">
   <a href="https://www.npmjs.com/package/@trajekt/core"><img src="https://img.shields.io/npm/v/@trajekt/core?color=FFB224&label=npm" alt="npm" /></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
@@ -152,7 +154,8 @@ Replay a fixed set of scenarios — mocked tools and data — on every change, a
   });
   ```
 
-- **Compare eval suites.** Tag eval runs with `trajekt.scenario`, and give them a quality score (`trajekt.score.correct`, or `scoreTrajectory()` from your assertions) (and the version under test). Trajekt keeps them out of production metrics and compares each scenario with itself across two versions — a paired test that catches a regression with a dozen scenarios — then says `pass` or `fail`, which scenarios got worse, and links to a step-by-step diff. - **Gate your pull requests.** The [GitHub Action](actions/eval-suite) compares the PR head with its base, comments the result on the pull request — which scenarios got worse, with a link to their diff — and fails the job on a regression:
+- **Compare eval suites.** Tag eval runs with `trajekt.scenario` and the version under test, and give them a quality score (`trajekt.score.correct`, or `scoreTrajectory()` from your assertions). Trajekt keeps them out of production metrics and compares each scenario with itself across two versions — a paired test that catches a regression with a dozen scenarios — then says `pass` or `fail`, which scenarios got worse, and links to a step-by-step diff.
+- **Gate your pull requests.** The [GitHub Action](actions/eval-suite) compares the PR head with its base, comments the result on the pull request — which scenarios got worse, with a link to their diff — and fails the job on a regression:
 
   ```yaml
   - uses: LeoLR/Trajekt/actions/eval-suite@main

@@ -15,10 +15,12 @@ export default defineConfig({
   server: { port: 5173 },
   build: {
     rollupOptions: {
-      // Deux pages : la landing et la documentation (/docs/).
+      // Quatre pages : landing et documentation, en anglais et en français (/fr/).
       input: {
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
         docs: fileURLToPath(new URL('./docs/index.html', import.meta.url)),
+        fr: fileURLToPath(new URL('./fr/index.html', import.meta.url)),
+        frDocs: fileURLToPath(new URL('./fr/docs/index.html', import.meta.url)),
       },
     },
   },

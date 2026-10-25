@@ -6,6 +6,8 @@ import { render } from '../dist-ssr/entry-server.js';
 const pages = [
   ['home', '../dist/index.html'],
   ['docs', '../dist/docs/index.html'],
+  ['fr-home', '../dist/fr/index.html'],
+  ['fr-docs', '../dist/fr/docs/index.html'],
 ];
 for (const [page, path] of pages) {
   const file = new URL(path, import.meta.url);

@@ -1,11 +1,34 @@
 import type { ReactNode } from 'react';
-import { CopyButton, DEMO_URL, Page, REPO_URL } from './Layout';
+import { CopyButton, DEMO_URL, Page, REPO_URL, useLang } from './Layout';
 
 /**
  * Documentation : installation, envoi de traces, utilisation, tests.
  * Tout ce qui est écrit ici doit correspondre au code du dépôt
  * (apps/dashboard, packages/core) — pas de fonctionnalité annoncée.
  */
+
+export type Sections = Array<[string, string, Array<[string, string]>?]>;
+
+/** Navigation latérale de la doc. */
+export function DocNav({ sections }: { sections: Sections }) {
+  return (
+    <nav className="doc-nav" aria-label="Documentation">
+      <div className="doc-nav-title mono">DOCUMENTATION</div>
+      <ul>
+        {sections.map(([id, label, children]) => (
+          <li key={id}>
+            <a href={`#${id}`}>{label}</a>
+            {children && (
+              <ul>
+                {children.map(([cid, clabel]) => <li key={cid}><a href={`#${cid}`}>{clabel}</a></li>)}
+              </ul>
+            )}
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
 
 const SECTIONS: Array<[string, string, Array<[string, string]>?]> = [
   ['overview', 'Overview'],
@@ -15,7 +38,7 @@ const SECTIONS: Array<[string, string, Array<[string, string]>?]> = [
   ['scores', 'Quality scores'],
   ['dashboard', 'Using the dashboard', [['compare-versions', 'Comparing versions']]],
   ['regressions', 'Regression alerts'],
-  ['projects', 'Projects & operations'],
+  ['projects', 'Projects & operations', [['redaction', 'Sensitive data']]],
   ['ai', 'Ask your agents (MCP)', [['read-keys', 'Read API keys'], ['mcp-tools', 'Tools']]],
   ['library', '@trajekt/core'],
   ['testing', 'Testing your agent', [['test-assert', 'Assert on a run'], ['eval-suites', 'Eval suites'], ['eval-ci', 'In CI'], ['test-trajekt', 'Test Trajekt itself']]],
@@ -23,49 +46,36 @@ const SECTIONS: Array<[string, string, Array<[string, string]>?]> = [
   ['troubleshooting', 'Troubleshooting'],
 ];
 
-function Code({ children, lang = 'bash', label }: { children: string; lang?: string; label?: string }) {
+export function Code({ children, lang = 'bash', label }: { children: string; lang?: string; label?: string }) {
   const text = children.replace(/^\n/, '').replace(/\n\s*$/, '');
+  const fr = useLang() === 'fr';
   return (
     <div className="doc-code">
       <div className="doc-code-bar">
         <span className="mono">{label ?? lang}</span>
-        <CopyButton text={text} label={`Copy ${label ?? lang} snippet`} />
+        <CopyButton text={text} label={fr ? `Copier : ${label ?? lang}` : `Copy ${label ?? lang} snippet`} />
       </div>
       <pre className="mono" tabIndex={0}>{text}</pre>
     </div>
   );
 }
 
-function H2({ id, children }: { id: string; children: ReactNode }) {
+export function H2({ id, children }: { id: string; children: ReactNode }) {
   return <h2 id={id} className="doc-h2"><a href={`#${id}`} className="doc-anchor">{children}</a></h2>;
 }
-function H3({ id, children }: { id: string; children: ReactNode }) {
+export function H3({ id, children }: { id: string; children: ReactNode }) {
   return <h3 id={id} className="doc-h3"><a href={`#${id}`} className="doc-anchor">{children}</a></h3>;
 }
-function Note({ children, tone = 'info' }: { children: ReactNode; tone?: 'info' | 'warn' }) {
+export function Note({ children, tone = 'info' }: { children: ReactNode; tone?: 'info' | 'warn' }) {
   return <div className={`doc-note doc-note-${tone}`}>{children}</div>;
 }
-const C = ({ children }: { children: ReactNode }) => <code className="mono doc-inline">{children}</code>;
+export const C = ({ children }: { children: ReactNode }) => <code className="mono doc-inline">{children}</code>;
 
 export function Docs() {
   return (
     <Page page="docs">
       <div className="container doc-layout">
-        <nav className="doc-nav" aria-label="Documentation">
-          <div className="doc-nav-title mono">DOCUMENTATION</div>
-          <ul>
-            {SECTIONS.map(([id, label, children]) => (
-              <li key={id}>
-                <a href={`#${id}`}>{label}</a>
-                {children && (
-                  <ul>
-                    {children.map(([cid, clabel]) => <li key={cid}><a href={`#${cid}`}>{clabel}</a></li>)}
-                  </ul>
-                )}
-              </li>
-            ))}
-          </ul>
-        </nav>
+        <DocNav sections={SECTIONS} />
 
         <article className="doc">
           <div className="eyebrow mono">DOCS</div>
@@ -208,7 +218,7 @@ await traceRun(tracer, { agent: 'sentry-triage', agentVersion: '1.5.0', promptVe
 });
 `}</Code>
           <p>
-            Calls to the model: wrap the Anthropic client once and every <C>messages.create</C> is recorded — model, tokens including the prompt cache (priced as such), stop reason, and the messages unless <C>{'{ captureContent: false }'}</C>. Other SDKs: <C>traceLlm(tracer, {'{ model, input }'}, () => call())</C> reads Anthropic and OpenAI responses.
+            Calls to the model: wrap the Anthropic client once and every <C>messages.create</C> is recorded — model, tokens including the prompt cache (priced as such), stop reason, and the messages unless <C>{'{ captureContent: false }'}</C>. Other SDKs: <C>{'traceLlm(tracer, { model, input }, () => call())'}</C> reads Anthropic and OpenAI responses.
           </p>
           <Code lang="ts">{`
 import Anthropic from '@anthropic-ai/sdk';
@@ -268,8 +278,8 @@ LangChainInstrumentor().instrument()
             Already on Langfuse? Import its traces, scores included, without touching your agent. Run it on a schedule: it only adds what is new and never duplicates a run.
           </p>
           <Code label="import the last 7 days of one agent">{`
-LANGFUSE_HOST=https://cloud.langfuse.com \
-LANGFUSE_PUBLIC_KEY=pk-lf-... LANGFUSE_SECRET_KEY=sk-lf-... \
+LANGFUSE_HOST=https://cloud.langfuse.com \\
+LANGFUSE_PUBLIC_KEY=pk-lf-... LANGFUSE_SECRET_KEY=sk-lf-... \\
 pnpm --filter dashboard import-langfuse --since 7d --name sentry-triage
 `}</Code>
           <p>
@@ -326,8 +336,8 @@ curl -X POST http://localhost:3000/v1/traces \\
             <li><strong>After the fact</strong>, when you know: the user's feedback, the merge request that got merged, a review. Send it with the trace id your app already has. A score sent this way is never overwritten by the trace.</li>
           </ul>
           <Code label="POST /v1/scores — ingestion key">{`
-curl -X POST https://trajekt.example.com/v1/scores \
-  -H "Authorization: Bearer tk_live_..." -H "Content-Type: application/json" \
+curl -X POST https://trajekt.example.com/v1/scores \\
+  -H "Authorization: Bearer tk_live_..." -H "Content-Type: application/json" \\
   -d '{ "traceId": "4bf92f3577b34da6a3ce929d0e0e4736", "name": "correct", "value": 0, "comment": "wrong Jira project" }'
 `}</Code>
           <p>

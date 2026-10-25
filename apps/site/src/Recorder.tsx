@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLang } from './Layout';
 
 /**
  * Le "recorder" du hero : une trace figée, avec une tête de lecture qui
@@ -57,12 +58,13 @@ function usePlayhead(count: number, intervalMs: number): number | null {
 
 export function Recorder() {
   const head = usePlayhead(STEPS.length, 1100);
+  const fr = useLang() === 'fr';
   const headPos = head === null ? null : (STEPS[head].start / TOTAL) * 100;
 
   return (
-    <figure className="recorder" aria-label="Example recording of an agent run">
+    <figure className="recorder" aria-label={fr ? "Exemple d'enregistrement d'un run d'agent" : 'Example recording of an agent run'}>
       <div className="recorder-bar">
-        <span>AGENT FLIGHT RECORDER · DO NOT OPEN</span>
+        <span>{fr ? 'BOÎTE NOIRE D’AGENT · NE PAS OUVRIR' : 'AGENT FLIGHT RECORDER · DO NOT OPEN'}</span>
         <span className="rec"><span className="rec-dot" aria-hidden="true" />REC</span>
       </div>
       <div className="recorder-body">
@@ -99,7 +101,7 @@ export function Recorder() {
           {headPos !== null && <span className="playhead" style={{ left: `calc(var(--track-start) + (100% - var(--track-start)) * ${headPos / 100})` }} aria-hidden="true" />}
         </ol>
         <figcaption className="recorder-legend">
-          Steps #11 and #13 repeat #5 with identical arguments. #15 fails with 422.
+          {fr ? 'Les steps #11 et #13 répètent #5 avec les mêmes arguments. #15 échoue en 422.' : 'Steps #11 and #13 repeat #5 with identical arguments. #15 fails with 422.'}
         </figcaption>
       </div>
     </figure>
