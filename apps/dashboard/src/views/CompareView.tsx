@@ -35,8 +35,9 @@ export function CompareView({ data }: { data: ComparePageData }) {
   const A = a.summary;
   const B = b.summary;
   const config: Array<[string, string | null, string | null]> = [
+    ['App version', A.appVersion, B.appVersion],
     ['Agent version', A.agentVersion, B.agentVersion],
-    ['Prompt version', (a.trajectory.metadata.promptVersion as string | undefined) ?? null, (b.trajectory.metadata.promptVersion as string | undefined) ?? null],
+    ['Prompt version', A.promptVersion, B.promptVersion],
     ['Model', A.primaryModel, B.primaryModel],
   ];
   const changedConfig = config.filter(([, x, y]) => (x ?? '') !== (y ?? ''));
@@ -81,7 +82,7 @@ export function CompareView({ data }: { data: ComparePageData }) {
       <section className="section">
         <h2>What changed between them</h2>
         {changedConfig.length === 0 ? (
-          <p className="faint">Same agent version, prompt version and model.</p>
+          <p className="faint">Same app version, agent version, prompt version and model.</p>
         ) : (
           <div className="panel table-wrap">
             <table>

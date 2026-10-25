@@ -6,7 +6,10 @@ import { decodeCursor, encodeCursor } from '../../lib/route';
 
 export const dynamic = 'force-dynamic';
 
-type Search = { agent?: string; version?: string; status?: string; loops?: string; cursor?: string };
+type Search = {
+  agent?: string; version?: string; appVersion?: string; promptVersion?: string; model?: string;
+  status?: string; loops?: string; cursor?: string;
+};
 
 export default async function RunsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
@@ -14,7 +17,11 @@ export default async function RunsPage({ searchParams }: { searchParams: Promise
   if (!project) return <SetupView />;
   const filters = {
     agent: sp.agent || undefined,
+    // Les valeurs de dimension n'ont de sens qu'avec un agent choisi.
     version: sp.agent && sp.version ? sp.version : undefined,
+    appVersion: sp.agent && sp.appVersion ? sp.appVersion : undefined,
+    promptVersion: sp.agent && sp.promptVersion ? sp.promptVersion : undefined,
+    model: sp.agent && sp.model ? sp.model : undefined,
     status: sp.status === 'ok' || sp.status === 'error' ? sp.status : undefined,
     loopsOnly: sp.loops === '1',
     cursor: sp.cursor ? decodeCursor(sp.cursor) ?? undefined : undefined,

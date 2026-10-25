@@ -27,7 +27,9 @@ export function RunView({ data }: { data: RunPageData }) {
           <h1 className="mono" style={{ letterSpacing: '-0.02em' }}>run_{shortId(s.id)}</h1>
           <div className="row" style={{ marginTop: 6 }}>
             <RunStatus status={s.status} />
-            {s.agentVersion && <span className="chip">{s.agentVersion}</span>}
+            {s.appVersion && s.appVersion !== s.agentVersion && <span className="chip">app {s.appVersion}</span>}
+            {s.agentVersion && <span className="chip">agent {s.agentVersion}</span>}
+            {s.promptVersion && <span className="chip">prompt {s.promptVersion}</span>}
             {s.primaryModel && <span className="chip">{s.primaryModel}</span>}
             {s.sourceFormat && <span className="chip">{s.sourceFormat}</span>}
             <span className="faint mono" style={{ fontSize: 12 }}>{new Date(s.startedAt).toISOString().replace('T', ' ').slice(0, 19)} UTC</span>

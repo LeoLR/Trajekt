@@ -206,7 +206,8 @@ const langfuseNormalizer: Normalizer = {
         name: trace.name,
         traceId: trace.id ?? undefined,
         agentName: str(meta.agentName) ?? trace.name ?? undefined,
-        agentVersion: str(meta.agentVersion) ?? trace.release ?? trace.version ?? undefined,
+        appVersion: str(meta.appVersion) ?? trace.release ?? undefined,
+        agentVersion: str(meta.agentVersion) ?? trace.version ?? trace.release ?? undefined,
         promptVersion: str(meta.promptVersion) ?? promptVersion,
         environment: trace.environment ?? undefined,
       },
@@ -343,11 +344,22 @@ function otlpFromEntries(entries: OtlpEntry[]): Trajectory {
       traceId,
       agentName:
         pick(['trajekt.agent.name', 'gen_ai.agent.name', 'ai.telemetry.functionId']) ?? serviceName,
+      // service.version décrit le service déployé : c'est la version de
+      // l'appli. La version d'agent n'est renseignée que si elle est
+      // explicite — le repli sur la version d'appli se fait au stockage,
+      // sinon un lot sans racine écraserait la vraie valeur à la fusion.
+      appVersion: pick(
+        ['trajekt.app.version', 'app.version', 'ai.telemetry.metadata.appVersion'],
+        ['trajekt.app.version', 'app.version', 'service.version'],
+      ),
       agentVersion: pick(
         ['trajekt.agent.version', 'gen_ai.agent.version', 'ai.telemetry.metadata.agentVersion'],
-        ['service.version'],
+        ['trajekt.agent.version'],
       ),
-      promptVersion: pick(['trajekt.prompt.version', 'ai.telemetry.metadata.promptVersion']),
+      promptVersion: pick(
+        ['trajekt.prompt.version', 'gen_ai.prompt.version', 'ai.telemetry.metadata.promptVersion'],
+        ['trajekt.prompt.version'],
+      ),
       environment: pick(
         ['trajekt.environment'],
         ['deployment.environment.name', 'deployment.environment'],

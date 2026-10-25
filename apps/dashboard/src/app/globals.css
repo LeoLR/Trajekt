@@ -190,3 +190,10 @@ pre.code { margin: 0; background: var(--bg); border: 1px solid var(--border); bo
 @media (prefers-reduced-motion: no-preference) {
   .tl-row, .agent-card { transition: background 0.12s, border-color 0.12s; }
 }
+
+/* ---------- Comparaison par dimension ---------- */
+.compare-controls { display: grid; gap: 12px; margin-bottom: 14px; }
+.dim-chip { min-height: 32px; font-size: 12px; }
+a.dim-chip:hover { border-color: var(--text-4); color: var(--text); }
+.dim-chip.is-disabled { opacity: 0.45; cursor: not-allowed; }
+.ab-form { margin-bottom: 0; }

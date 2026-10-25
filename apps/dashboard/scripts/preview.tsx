@@ -49,6 +49,9 @@ async function main() {
     await write('agents', <AgentsView data={await loadAgentsPage(ctx.db, project.id, now)} />);
     await write('agent', <AgentView data={(await loadAgentPage(ctx.db, project.id, 'sentry-triage', { now }))!} />);
     await write('agent-window', <AgentView data={(await loadAgentPage(ctx.db, project.id, 'sentry-triage', { now, mode: 'window' }))!} />);
+    await write('agent-ab-prompt', <AgentView data={(await loadAgentPage(ctx.db, project.id, 'sentry-triage', { now, mode: 'ab', dimension: 'prompt', a: 'v7', b: 'v8' }))!} />);
+    await write('agent-app', <AgentView data={(await loadAgentPage(ctx.db, project.id, 'sentry-triage', { now, mode: 'version', dimension: 'app' }))!} />);
+    await write('agent-model', <AgentView data={(await loadAgentPage(ctx.db, project.id, 'sentry-triage', { now, mode: 'ab', dimension: 'model' }))!} />);
     await write('agent-healthy', <AgentView data={(await loadAgentPage(ctx.db, project.id, 'support-bot', { now }))!} />);
     await write('runs', <RunsView data={await loadRunsPage(ctx.db, project.id, { agent: 'sentry-triage' })} now={now.toISOString()} nextHref="/runs?cursor=x" />);
 

@@ -11,8 +11,8 @@ const SECTIONS: Array<[string, string, Array<[string, string]>?]> = [
   ['overview', 'Overview'],
   ['quickstart', 'Quickstart'],
   ['install', 'Installation', [['install-docker', 'Docker Compose'], ['install-source', 'From source'], ['configuration', 'Configuration']]],
-  ['send', 'Sending traces', [['send-otel', 'OpenTelemetry'], ['send-ai-sdk', 'Vercel AI SDK'], ['send-file', 'Langfuse & files'], ['identity', 'Agent name & version']]],
-  ['dashboard', 'Using the dashboard'],
+  ['send', 'Sending traces', [['send-otel', 'OpenTelemetry'], ['send-ai-sdk', 'Vercel AI SDK'], ['send-file', 'Langfuse & files'], ['identity', 'Agent, versions & model']]],
+  ['dashboard', 'Using the dashboard', [['compare-versions', 'Comparing versions']]],
   ['regressions', 'Regression alerts'],
   ['library', '@trajekt/core'],
   ['testing', 'Testing', [['test-agent', 'Test your agent'], ['test-trajekt', 'Test Trajekt itself']]],
@@ -155,7 +155,7 @@ pnpm dev                             # http://localhost:3000
           <p>Point any OTLP/HTTP exporter at the root URL of Trajekt; the exporter adds <C>/v1/traces</C> itself. Use the JSON encoding.</p>
           <Code label=".env of your agent">{`
 OTEL_SERVICE_NAME=sentry-triage
-OTEL_RESOURCE_ATTRIBUTES=service.version=1.5.0
+OTEL_RESOURCE_ATTRIBUTES=service.version=3.2.0,trajekt.agent.version=1.5.0,trajekt.prompt.version=v8
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:3000
 OTEL_EXPORTER_OTLP_PROTOCOL=http/json
 OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer tk_live_..."
@@ -191,7 +191,7 @@ const result = await generateText({
   experimental_telemetry: {
     isEnabled: true,
     functionId: 'trip-planner',
-    metadata: { agentVersion: '2.3.0' },
+    metadata: { appVersion: '3.2.0', agentVersion: '2.3.0', promptVersion: 'v8' },
   },
 });
 `}</Code>
@@ -214,22 +214,33 @@ curl -X POST http://localhost:3000/v1/traces \\
             Example files for each format: <a href="/samples/otlp-sentry-triage.json" download>OTLP</a>, <a href="/samples/langfuse-support-bot.json" download>Langfuse</a>, <a href="/samples/ai-sdk-trip-planner.json" download>Vercel AI SDK</a>.
           </p>
 
-          <H3 id="identity">Agent name and version</H3>
+          <H3 id="identity">Agent, versions and model</H3>
           <p>
-            Runs are grouped by agent name, and versions are compared with each other, so set both. For each field the first value found wins.
+            Each run carries five labels. The agent name groups runs together; the four others are the dimensions you can compare on:
           </p>
+          <ul>
+            <li><strong>App version</strong> — the release of the application that embeds the agent (your service, your web app).</li>
+            <li><strong>Agent version</strong> — the agent itself: its code, tools and orchestration. It defaults to the app version when you do not set it.</li>
+            <li><strong>Prompt version</strong> — the version of the system prompt or prompt template.</li>
+            <li><strong>Model</strong> — read from the LLM calls of the run (the most used one), nothing to set.</li>
+          </ul>
+          <p>For each field the first value found wins.</p>
           <div className="doc-table-wrap">
             <table className="doc-table">
               <thead><tr><th>Field</th><th>OpenTelemetry (span, then resource)</th><th>Langfuse</th><th>Header fallback</th></tr></thead>
               <tbody>
                 <tr><td>Agent</td><td><C>trajekt.agent.name</C>, <C>gen_ai.agent.name</C>, <C>ai.telemetry.functionId</C>, <C>service.name</C></td><td><C>metadata.agentName</C>, trace name</td><td><C>X-Trajekt-Agent</C></td></tr>
-                <tr><td>Version</td><td><C>trajekt.agent.version</C>, <C>gen_ai.agent.version</C>, <C>ai.telemetry.metadata.agentVersion</C>, <C>service.version</C></td><td><C>metadata.agentVersion</C>, <C>release</C>, <C>version</C></td><td><C>X-Trajekt-Agent-Version</C></td></tr>
-                <tr><td>Prompt version</td><td><C>trajekt.prompt.version</C>, <C>ai.telemetry.metadata.promptVersion</C></td><td><C>metadata.promptVersion</C>, generation <C>promptVersion</C></td><td><C>X-Trajekt-Prompt-Version</C></td></tr>
+                <tr><td>App version</td><td><C>trajekt.app.version</C>, <C>app.version</C>, <C>ai.telemetry.metadata.appVersion</C>, <C>service.version</C></td><td><C>metadata.appVersion</C>, <C>release</C></td><td><C>X-Trajekt-App-Version</C></td></tr>
+                <tr><td>Agent version</td><td><C>trajekt.agent.version</C>, <C>gen_ai.agent.version</C>, <C>ai.telemetry.metadata.agentVersion</C> — otherwise the app version</td><td><C>metadata.agentVersion</C>, <C>version</C>, <C>release</C></td><td><C>X-Trajekt-Agent-Version</C></td></tr>
+                <tr><td>Prompt version</td><td><C>trajekt.prompt.version</C>, <C>gen_ai.prompt.version</C>, <C>ai.telemetry.metadata.promptVersion</C></td><td><C>metadata.promptVersion</C>, generation <C>promptVersion</C></td><td><C>X-Trajekt-Prompt-Version</C></td></tr>
                 <tr><td>Environment</td><td><C>trajekt.environment</C>, <C>deployment.environment.name</C></td><td><C>environment</C></td><td><C>X-Trajekt-Environment</C></td></tr>
               </tbody>
             </table>
           </div>
           <p>Headers are used only when the trace carries no value. A run without any agent name is filed under <C>unknown</C>.</p>
+          <Note>
+            If your app and your agent ship together, setting <C>service.version</C> is enough. Set <C>trajekt.agent.version</C> and <C>trajekt.prompt.version</C> as soon as they change independently — otherwise a prompt change cannot be told apart from an app release.
+          </Note>
 
           {/* ------------------------------------------------------------ */}
           <H2 id="dashboard">Using the dashboard</H2>
@@ -238,14 +249,28 @@ curl -X POST http://localhost:3000/v1/traces \\
               <thead><tr><th>Page</th><th>Use it to</th></tr></thead>
               <tbody>
                 <tr><td><C>/</C> Agents</td><td>See which agents regressed. One card per agent: runs, failure rate, median duration and mean cost over 24 h, a 14-day trend, and the regressions found.</td></tr>
-                <tr><td><C>/agents/:name</C></td><td>Answer "is it getting worse, and since when?". The latest version against the previous one — or the last 24 h against the 7 days before — metric by metric; daily trends with the first run of each version marked; tool paths per version; recent runs.</td></tr>
-                <tr><td><C>/runs</C></td><td>Filter runs by agent, version, status, or "repeated tool calls only".</td></tr>
+                <tr><td><C>/agents/:name</C></td><td>Answer "is it getting worse, and since when?". Compare versions metric by metric (see below), the last 24 h against the 7 days before, daily trends with the first run of each version marked, tool paths per version, recent runs.</td></tr>
+                <tr><td><C>/runs</C></td><td>Filter runs by agent, app version, agent version, prompt version, model, status, or "repeated tool calls only".</td></tr>
                 <tr><td><C>/runs/:id</C></td><td>Replay one run on a timeline. Repeated calls (<C>REPEAT #5</C>), retries (<C>ATTEMPT 2</C>) and failures are marked; click a step to see its arguments, result, prompt or output.</td></tr>
                 <tr><td><C>/runs/:id/compare</C></td><td>Align two runs step by step. By default the run is compared with the latest successful run of the previous version; add <C>?with=&lt;run id&gt;</C> to pick another one.</td></tr>
                 <tr><td><C>/explore</C></td><td>Open a trace file in the browser without sending it to the server.</td></tr>
               </tbody>
             </table>
           </div>
+          <H3 id="compare-versions">Comparing versions</H3>
+          <p>
+            On an agent page, <strong>Compare by</strong> picks the dimension — app version, agent version, prompt version or model — and the comparison follows it:
+          </p>
+          <ul>
+            <li><strong>Latest vs previous</strong>: the most recent value against the one before it.</li>
+            <li><strong>Pick two</strong>: any A and B, e.g. prompt <C>v7</C> against <C>v8</C>, or app <C>3.1.0</C> against <C>3.2.0</C>. For models, A defaults to the most used one, so a cheaper model under test shows up as B.</li>
+          </ul>
+          <p>
+            The URL keeps the selection (<C>/agents/sentry-triage?dim=prompt&amp;compare=ab&amp;a=v7&amp;b=v8</C>), so a comparison can be shared as a link. The versions table, the tool paths and the run filters follow the same dimension.
+          </p>
+          <Note tone="warn">
+            Comparing two app versions also compares everything that shipped with them. If a new agent version went out during the same period, narrow the time range — the API takes <C>from</C> and <C>to</C> — or compare on the agent dimension.
+          </Note>
           <p>How the run metrics are computed:</p>
           <ul>
             <li><strong>Repeated tool call</strong>: the same tool with the same arguments (key order ignored) as an earlier call that succeeded. Calls without captured arguments are never counted.</li>
@@ -260,7 +285,7 @@ curl -X POST http://localhost:3000/v1/traces \\
           <p>Two comparisons run for each agent that had runs in the last 24 h:</p>
           <ul>
             <li>the last 24 h against the 7 days before;</li>
-            <li>the latest version against the previous one, while the latest version is less than 7 days old.</li>
+            <li>the latest agent version, prompt version and app version against the previous one, each while it is less than 7 days old — a prompt change alone can raise an alert.</li>
           </ul>
           <p>
             Eight metrics are compared: failed runs, failed tool calls, mean duration, mean cost, steps per run, tokens per run, repeated tool calls, and the share of runs on a tool path never seen before. A metric is flagged only when all three hold:
@@ -360,9 +385,9 @@ pnpm --filter dashboard test
                 <tr><td><C>POST /v1/traces</C></td><td>API key</td><td>Ingest OTLP/JSON, a Langfuse trace, an AI SDK result or a trajectory. Returns the runs created or completed.</td></tr>
                 <tr><td><C>GET /api/agents</C></td><td>session</td><td>One summary per agent.</td></tr>
                 <tr><td><C>GET /api/agents/:name/timeseries</C></td><td>session</td><td><C>from</C>, <C>to</C>, <C>bucket=hour|day</C>, <C>version</C>.</td></tr>
-                <tr><td><C>GET /api/agents/:name/versions</C></td><td>session</td><td>Metrics per version.</td></tr>
-                <tr><td><C>GET /api/agents/:name/compare</C></td><td>session</td><td><C>mode=version|window</C>.</td></tr>
-                <tr><td><C>GET /api/runs</C></td><td>session</td><td><C>agent</C>, <C>version</C>, <C>status</C>, <C>loops=1</C>, <C>from</C>, <C>to</C>, <C>limit</C>, <C>cursor</C>.</td></tr>
+                <tr><td><C>GET /api/agents/:name/versions</C></td><td>session</td><td>Metrics per value of <C>dimension=app|agent|prompt|model</C> (default <C>agent</C>).</td></tr>
+                <tr><td><C>GET /api/agents/:name/compare</C></td><td>session</td><td><C>mode=window</C>, <C>mode=version&amp;dimension=…</C>, or <C>mode=ab&amp;dimension=…&amp;a=…&amp;b=…</C> with optional <C>from</C>, <C>to</C>.</td></tr>
+                <tr><td><C>GET /api/runs</C></td><td>session</td><td><C>agent</C>, <C>appVersion</C>, <C>version</C>, <C>promptVersion</C>, <C>model</C>, <C>status</C>, <C>loops=1</C>, <C>from</C>, <C>to</C>, <C>limit</C>, <C>cursor</C>.</td></tr>
                 <tr><td><C>GET /api/runs/:id</C></td><td>session</td><td>Run metrics and the full trajectory.</td></tr>
                 <tr><td><C>GET /api/alerts</C></td><td>session</td><td>Alerts sent, newest first.</td></tr>
                 <tr><td><C>POST /api/alerts/check</C></td><td><C>CRON_SECRET</C></td><td>Run the regression check (also <C>GET</C>, for Vercel Cron).</td></tr>

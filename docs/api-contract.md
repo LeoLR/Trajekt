@@ -31,7 +31,13 @@ Corps : OTLP/JSON (`resourceSpans`), export de trace Langfuse, résultat
 `generateText` du Vercel AI SDK, ou `Trajectory` native. `Content-Encoding: gzip` accepté.
 
 En-têtes optionnels, utilisés **seulement si la trace n'en porte pas** :
-`X-Trajekt-Agent`, `X-Trajekt-Agent-Version`, `X-Trajekt-Prompt-Version`, `X-Trajekt-Environment`.
+`X-Trajekt-Agent`, `X-Trajekt-App-Version`, `X-Trajekt-Agent-Version`,
+`X-Trajekt-Prompt-Version`, `X-Trajekt-Environment`.
+
+**Dimensions.** Chaque run porte une version d'appli (`service.version`),
+une version d'agent (`trajekt.agent.version`, à défaut la version
+d'appli), une version de prompt et un modèle (le plus utilisé du run).
+Ce sont les quatre axes de comparaison : `dimension=app|agent|prompt|model`.
 
 **Fusion.** Un payload OTLP peut contenir plusieurs traces (une trajectoire
 par `traceId`), et une trace peut arriver en plusieurs envois : chaque envoi
@@ -44,7 +50,8 @@ run sont recalculées. Renvoyer un lot est sans effet (steps indexés par span i
 {
   "trajectories": [
     {
-      "id": "3f1c…", "traceId": "a1b2…", "agentName": "sentry-triage", "agentVersion": "1.5.0",
+      "id": "3f1c…", "traceId": "a1b2…", "agentName": "sentry-triage",
+      "appVersion": "3.2.0", "agentVersion": "1.5.0",
       "sourceFormat": "otlp", "status": "ok", "stepCount": 11, "merged": true,
       "createdAt": "2026-10-24T10:00:03.000Z"
     }
@@ -68,14 +75,15 @@ Un résumé par agent actif sur 14 jours : `runs24h`, `runs7d`, `errorRate24h`,
 |---|---|---|
 | `from`, `to` | 14 derniers jours | ISO 8601 |
 | `bucket` | `day` | `hour` ou `day`, 744 points max |
-| `version` | — | filtre sur une version |
+| `dimension` | `agent` | `app`, `agent`, `prompt` ou `model` |
+| `version` | — | filtre sur une valeur de `dimension` |
 
 `points[]` : `{ t, runs, errorRate, toolErrorRate, p50DurationMs, p95DurationMs, avgCostUsd, avgSteps, avgTokens, avgRedundantToolCalls }`.
 Les buckets sans run sont présents avec `runs: 0` et des valeurs `null`.
 
-### `GET /api/agents/:name/versions`
+### `GET /api/agents/:name/versions?dimension=app|agent|prompt|model`
 
-Par version, la plus récente (première apparition) d'abord : `firstSeen`,
+Par valeur de la dimension (défaut `agent`), la plus récente (première apparition) d'abord : `firstSeen`,
 `lastSeen`, `runs`, `errorRate`, `p50DurationMs`, `avgCostUsd`, `avgSteps`,
 `avgRedundantToolCalls`, `topPath`, `topPathShare`.
 
@@ -83,12 +91,15 @@ Par version, la plus récente (première apparition) d'abord : `firstSeen`,
 
 | `mode` | Compare |
 |---|---|
-| `version` | dernière version vs la précédente (404 s'il n'y en a pas deux) |
 | `window` (défaut) | dernières `currentHours` (24) vs les `baselineDays` (7) jours précédents |
+| `version` | dernière valeur de `dimension` (défaut `agent`) vs la précédente (404 s'il n'y en a pas deux) |
+| `ab` | deux valeurs choisies : `dimension`, `a` (référence), `b`, et optionnellement `from`, `to` |
+
+Exemple : `GET /api/agents/sentry-triage/compare?mode=ab&dimension=prompt&a=v7&b=v8`
 
 ```json
 {
-  "mode": "version", "baselineLabel": "1.4.0", "currentLabel": "1.5.0",
+  "mode": "version", "dimension": "agent", "baselineLabel": "1.4.0", "currentLabel": "1.5.0",
   "baselineRuns": 480, "currentRuns": 80,
   "comparisons": [
     { "metric": "redundantToolCalls", "label": "Repeated tool calls", "baseline": 0, "current": 0.82,
@@ -112,7 +123,8 @@ mesuré sur au moins 20 runs de chaque côté. Métriques : `errorRate`,
 
 | Param | Notes |
 |---|---|
-| `agent`, `version` | filtres exacts |
+| `agent` | filtre exact |
+| `appVersion`, `version` (agent), `promptVersion`, `model` | filtres exacts par dimension |
 | `status` | `ok` ou `error` |
 | `loops=1` | seulement les runs avec appels d'outil répétés |
 | `from`, `to` | ISO 8601, sur le début du run |
@@ -141,7 +153,8 @@ Alertes émises, les plus récentes d'abord.
 ### `POST /api/alerts/check` (ou `GET`, pour Vercel Cron)
 
 Pour chaque agent actif sur 24 h : comparaison fenêtre récente, et
-comparaison de versions si la dernière version a moins de 7 jours. Chaque
+dernière valeur contre la précédente pour les versions d'agent, de prompt
+et d'appli, chacune si elle a moins de 7 jours. Chaque
 régression nouvelle (pas d'alerte identique agent + métrique + mode depuis
 24 h) est enregistrée, puis postée sur `SLACK_WEBHOOK_URL` si défini.
 

@@ -2,10 +2,13 @@
  * Générateur de trafic réaliste, pour la démo (`pnpm seed`) et les tests.
  *
  * Deux agents :
- *   - sentry-triage (OTLP) : v1.4.0 stable, puis v1.5.0 déployée il y a
- *     deux jours, qui boucle sur gitlab.searchCode, consomme plus et
- *     échoue plus souvent (422 sur la création de MR). C'est la
- *     régression que le dashboard doit faire apparaître.
+ *   - sentry-triage (OTLP) : agent v1.4.0 (prompt v7) stable, puis v1.5.0
+ *     (prompt v8) déployée il y a deux jours, qui boucle sur
+ *     gitlab.searchCode, consomme plus et échoue plus souvent (422 sur la
+ *     création de MR). C'est la régression que le dashboard doit faire
+ *     apparaître. L'appli qui l'embarque passe de 3.1.0 à 3.2.0 trois
+ *     jours plus tôt, sans effet ; un quart des runs tourne sur
+ *     gpt-4.1-mini (A/B de modèle).
  *   - support-bot (Langfuse) : stable, pour montrer qu'un agent sain ne
  *     déclenche rien.
  *
@@ -82,7 +85,7 @@ class RunBuilder {
       ...(result !== undefined ? { 'gen_ai.tool.call.result': sv(JSON.stringify(result)) } : {}),
     }, error);
   }
-  root(agent: string, error?: string): Span {
+  root(agent: string, error?: string, extra: Record<string, string> = {}): Span {
     return {
       traceId: this.traceId,
       spanId: this.rootId,
@@ -93,6 +96,7 @@ class RunBuilder {
       attributes: [
         { key: 'gen_ai.operation.name', value: sv('invoke_agent') },
         { key: 'gen_ai.agent.name', value: sv(agent) },
+        ...Object.entries(extra).map(([key, v]) => ({ key, value: sv(v) })),
       ],
       status: error ? { code: 2, message: error } : { code: 0 },
       events: [],
@@ -121,10 +125,20 @@ const ISSUES = ['PAY-1432', 'PAY-1440', 'CHK-219', 'CHK-233', 'AUTH-88', 'SRCH-4
 const FILES = ['checkout/payment.ts', 'checkout/discount.ts', 'auth/session.ts', 'search/indexer.ts'];
 
 /** Un run de sentry-triage, sous forme de deux payloads OTLP (enfants, puis racine). */
-export function sentryTriageRun(r: Rand, startMs: number, version: '1.4.0' | '1.5.0'): unknown[] {
+export interface TriageOptions {
+  /** Version de l'appli qui embarque l'agent (resource service.version). */
+  appVersion?: string;
+  /** Force le modèle (sinon claude-sonnet-4-5, ou gpt-4.1-mini pour un quart des runs). */
+  model?: string;
+}
+
+export function sentryTriageRun(r: Rand, startMs: number, version: '1.4.0' | '1.5.0', o: TriageOptions = {}): unknown[] {
   const b = new RunBuilder(r, hex(r, 32), hex(r, 16), startMs);
   const regressed = version === '1.5.0';
-  const model = 'claude-sonnet-4-5';
+  // A/B de modèle en cours : un quart des runs sur un modèle moins cher.
+  const model = o.model ?? (r() < 0.25 ? 'gpt-4.1-mini' : 'claude-sonnet-4-5');
+  const appVersion = o.appVersion ?? '3.1.0';
+  const promptVersion = version === '1.5.0' ? 'v8' : 'v7';
   const issue = ISSUES[Math.floor(r() * ISSUES.length)];
   const file = FILES[Math.floor(r() * FILES.length)];
 
@@ -162,8 +176,11 @@ export function sentryTriageRun(r: Rand, startMs: number, version: '1.4.0' | '1.
   const children = b.spans;
   const cut = Math.max(1, Math.floor(children.length * between(r, 0.4, 0.8)));
   return [
-    otlp(children.slice(0, cut), 'sentry-triage', version),
-    otlp([...children.slice(cut), b.root('sentry-triage', rootError)], 'sentry-triage', version),
+    otlp(children.slice(0, cut), 'sentry-triage', appVersion),
+    otlp([...children.slice(cut), b.root('sentry-triage', rootError, {
+      'trajekt.agent.version': version,
+      'trajekt.prompt.version': promptVersion,
+    })], 'sentry-triage', appVersion),
   ];
 }
 
@@ -198,10 +215,11 @@ export interface SimulatedPayload {
  * Deux semaines de trafic se terminant à `now`. La v1.5.0 de
  * sentry-triage remplace la v1.4.0 `deployDaysAgo` jours avant `now`.
  */
-export function simulateTraffic(now: number, opts: { days?: number; seed?: number; deployDaysAgo?: number; runsPerDay?: number } = {}): SimulatedPayload[] {
+export function simulateTraffic(now: number, opts: { days?: number; seed?: number; deployDaysAgo?: number; appDeployDaysAgo?: number; runsPerDay?: number } = {}): SimulatedPayload[] {
   const r = rng(opts.seed ?? 42);
   const days = opts.days ?? 14;
   const deployAt = now - (opts.deployDaysAgo ?? 2) * 24 * 3600 * 1000;
+  const appDeployAt = now - (opts.appDeployDaysAgo ?? 5) * 24 * 3600 * 1000;
   const perDay = opts.runsPerDay ?? 40;
   const out: SimulatedPayload[] = [];
   const start = now - days * 24 * 3600 * 1000;
@@ -210,7 +228,9 @@ export function simulateTraffic(now: number, opts: { days?: number; seed?: numbe
     // Un peu de jitter pour éviter des horodatages réguliers.
     const at = start + ((i + r() * 0.8) / total) * (now - start - 60_000);
     const version = at >= deployAt ? '1.5.0' : '1.4.0';
-    for (const payload of sentryTriageRun(r, at, version)) out.push({ at, payload });
+    // L'appli passe en 3.2.0 quelques jours avant l'agent, sans changer son comportement.
+    const appVersion = at >= appDeployAt ? '3.2.0' : '3.1.0';
+    for (const payload of sentryTriageRun(r, at, version, { appVersion })) out.push({ at, payload });
     if (r() < 0.6) out.push({ at: at + 1000, payload: supportBotRun(r, at + 1000) });
   }
   return out;

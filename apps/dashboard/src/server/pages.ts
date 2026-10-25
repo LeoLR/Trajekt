@@ -6,6 +6,7 @@
 import { annotateSteps, diffTrajectories, type Comparison, type StepAnnotation, type TrajectoryDiff } from '@trajekt/core';
 import type { Db } from './db';
 import {
+  DIMENSIONS, compareValues, type Dimension,
   agentTimeseries, agentVersions, compareLatestVersions, compareRecentWindow, getRun,
   listAgents, listRuns, previousRunId, topPaths,
   type AgentOverview, type ComparisonResult, type ListRunsOptions, type RunDetail,
@@ -57,57 +58,116 @@ export async function loadAgentsPage(db: Db, projectId: string, now = new Date()
 }
 export type AgentsPageData = Awaited<ReturnType<typeof loadAgentsPage>>;
 
+export type CompareMode = 'version' | 'window' | 'ab';
+
 export interface AgentPageData {
   name: string;
   now: string;
-  mode: 'version' | 'window';
+  mode: CompareMode;
+  /** Dimension affichée (comparaison, tableau des valeurs, chemins). */
+  dimension: Dimension;
+  /** Valeurs connues de chaque dimension, la plus récente d'abord. */
+  dimensionValues: Record<Dimension, string[]>;
+  /** Valeurs comparées en mode ab. */
+  selected: { a: string | null; b: string | null };
   overview: AgentOverview | null;
   timeseries: TimeseriesPoint[];
   markers: Array<{ at: number; label: string }>;
+  /** Métriques par valeur de la dimension affichée. */
   versions: VersionStats[];
   comparison: ComparisonResult | null;
-  /** Le mode version est-il disponible (au moins deux versions) ? */
+  /** Le mode version est-il disponible (au moins deux valeurs) ? */
   canCompareVersions: boolean;
   paths: Array<{ version: string | null; total: number; paths: Array<{ path: string; runs: number; share: number }> }>;
   recentRuns: RunSummary[];
   alerts: AlertRow[];
 }
 
+export interface AgentPageOptions {
+  mode?: CompareMode;
+  dimension?: Dimension;
+  a?: string;
+  b?: string;
+  now?: Date;
+  days?: number;
+}
+
 export async function loadAgentPage(
-  db: Db, projectId: string, name: string, opts: { mode?: 'version' | 'window'; now?: Date; days?: number } = {},
+  db: Db, projectId: string, name: string, opts: AgentPageOptions = {},
 ): Promise<AgentPageData | null> {
   const now = opts.now ?? new Date();
   const days = opts.days ?? 14;
+  const dimension = opts.dimension ?? 'agent';
   const overview = (await listAgents(db, projectId, now)).find((a) => a.name === name) ?? null;
-  const versions = await agentVersions(db, projectId, name);
-  if (!overview && versions.length === 0) return null;
+
+  const dims = Object.keys(DIMENSIONS) as Dimension[];
+  const statsByDim = Object.fromEntries(
+    await Promise.all(dims.map(async (d) => [d, await agentVersions(db, projectId, name, d)] as const)),
+  ) as Record<Dimension, VersionStats[]>;
+  if (!overview && statsByDim.agent.length === 0) return null;
+  const dimensionValues = Object.fromEntries(
+    dims.map((d) => [d, statsByDim[d].map((v) => v.version).filter((v): v is string => v !== null)]),
+  ) as Record<Dimension, string[]>;
+  const versions = statsByDim[dimension];
 
   const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - (days - 1) * DAY);
   const timeseries = await agentTimeseries(db, projectId, name, { from, to: now, bucket: 'day' });
-  const markers = versions
+  // Déploiements : première apparition de chaque valeur. Les modèles d'un
+  // A/B tournent en parallèle, ce ne sont pas des déploiements : on montre
+  // alors ceux de l'agent.
+  const markerDim: Dimension = dimension === 'model' ? 'agent' : dimension;
+  const markers = statsByDim[markerDim]
     .filter((v) => v.version !== null && new Date(v.firstSeen) > from)
     .map((v) => ({ at: (new Date(v.firstSeen).getTime() - from.getTime()) / DAY - 0.5, label: v.version! }));
 
-  const byVersion = await compareLatestVersions(db, projectId, name);
-  const mode = opts.mode ?? (byVersion ? 'version' : 'window');
-  const comparison = mode === 'version' ? byVersion : await compareRecentWindow(db, projectId, name, { now });
+  const values = dimensionValues[dimension];
+  const latest = await compareLatestVersions(db, projectId, name, { dimension });
+  let mode: CompareMode = opts.mode ?? (latest ? 'version' : 'window');
+  let selected: AgentPageData['selected'] = { a: null, b: null };
+  let comparison: ComparisonResult | null = null;
+  if (mode === 'ab') {
+    // Par défaut : B = la valeur la plus récente, A = la précédente. Pour les
+    // modèles (souvent testés en parallèle), A = le modèle le plus utilisé,
+    // B = le suivant — on compare le challenger au modèle en place.
+    const ordered = dimension === 'model'
+      ? [...versions].filter((v) => v.version !== null).sort((x, y) => y.runs - x.runs).map((v) => v.version!)
+      : values;
+    const [defA, defB] = dimension === 'model' ? [ordered[0], ordered[1]] : [ordered[1], ordered[0]];
+    const a = opts.a && values.includes(opts.a) ? opts.a : defA;
+    const b = opts.b && values.includes(opts.b) ? opts.b : defB;
+    if (a && b) {
+      selected = { a, b };
+      comparison = await compareValues(db, projectId, name, dimension, a, b);
+    } else {
+      mode = 'window';
+    }
+  }
+  if (mode === 'version') {
+    comparison = latest;
+    if (!comparison) mode = 'window';
+  }
+  if (mode === 'window') comparison = await compareRecentWindow(db, projectId, name, { now });
 
-  const named = versions.filter((v) => v.version !== null).slice(0, 2);
+  // Chemins d'outils : les deux valeurs comparées (ou les deux plus récentes).
+  const pathValues = mode === 'ab' && selected.a && selected.b ? [selected.b, selected.a] : values.slice(0, 2);
   const paths = [];
-  for (const v of named.length ? named : [{ version: undefined as string | undefined }]) {
-    paths.push({ version: v.version ?? null, ...(await topPaths(db, projectId, name, v.version, 5)) });
+  for (const v of pathValues.length ? pathValues : [undefined]) {
+    paths.push({ version: v ?? null, ...(await topPaths(db, projectId, name, v, 5, dimension)) });
   }
 
   return {
     name,
     now: now.toISOString(),
     mode,
+    dimension,
+    dimensionValues,
+    selected,
     overview,
     timeseries,
     markers,
     versions,
     comparison,
-    canCompareVersions: Boolean(byVersion),
+    canCompareVersions: Boolean(latest),
     paths,
     recentRuns: (await listRuns(db, projectId, { agent: name, limit: 12 })).items,
     alerts: await recentAlerts(db, projectId, { agent: name, limit: 5 }),
@@ -119,7 +179,11 @@ export interface RunsPageData {
   runs: RunSummary[];
   nextCursor: { startedAt: string; id: string } | null;
   agents: string[];
+  /** Valeurs des dimensions de l'agent filtré (vides sans agent). */
   versions: string[];
+  appVersions: string[];
+  promptVersions: string[];
+  models: string[];
 }
 
 export async function loadRunsPage(db: Db, projectId: string, filters: ListRunsOptions): Promise<RunsPageData> {
@@ -127,10 +191,17 @@ export async function loadRunsPage(db: Db, projectId: string, filters: ListRunsO
   const agents = (await db.query<{ agent_name: string }>(
     'select distinct agent_name from trajectories where project_id = $1 order by 1', [projectId],
   )).map((r) => r.agent_name);
-  const versions = filters.agent
-    ? (await agentVersions(db, projectId, filters.agent)).map((v) => v.version).filter((v): v is string => v !== null)
-    : [];
-  return { filters, runs: page.items, nextCursor: page.nextCursor, agents, versions };
+  const valuesOf = async (d: Dimension) =>
+    filters.agent
+      ? (await agentVersions(db, projectId, filters.agent, d)).map((v) => v.version).filter((v): v is string => v !== null)
+      : [];
+  return {
+    filters, runs: page.items, nextCursor: page.nextCursor, agents,
+    versions: await valuesOf('agent'),
+    appVersions: await valuesOf('app'),
+    promptVersions: await valuesOf('prompt'),
+    models: await valuesOf('model'),
+  };
 }
 
 export interface RunPageData extends RunDetail {

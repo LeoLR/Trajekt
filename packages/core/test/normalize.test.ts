@@ -7,7 +7,8 @@ test('OTLP : identité de l’agent lue sur la racine puis la ressource', () => 
   const [t] = normalizeAll(otlpPayload(sentryRun()));
   assert.equal(t.metadata.traceId, 'a1b2c3d4e5f60718293a4b5c6d7e8f90');
   assert.equal(t.metadata.agentName, 'sentry-triage');
-  assert.equal(t.metadata.agentVersion, '1.4.0'); // service.version
+  assert.equal(t.metadata.appVersion, '1.4.0'); // service.version
+  assert.equal(t.metadata.agentVersion, undefined); // pas de version d'agent explicite
   assert.equal(t.metadata.sourceFormat, 'otlp');
   assert.equal(t.steps.length, 5);
   // tri chronologique : la racine (qui commence en premier) passe devant
@@ -136,4 +137,36 @@ test('AI SDK : modèle lu dans response.modelId (permet l’estimation du coût)
   const t = normalize({ steps: [{ text: 'ok', usage: { promptTokens: 1e6, completionTokens: 0 }, response: { modelId: 'gpt-4o-mini' }, toolCalls: [] }] });
   assert.equal((t.steps[0] as any).model, 'gpt-4o-mini');
   assert.equal(computeMetrics(t).costUsd, 0.15);
+});
+
+test('OTLP : version d’appli distincte de la version d’agent', () => {
+  const tid = 'appv';
+  const sv = (stringValue: string) => ({ stringValue });
+  // service.version seul : version d'appli ; la version d'agent reste vide
+  // (le stockage la fait retomber sur la version d'appli)
+  const a = normalize(otlpPayload([otlpSpan(tid, { spanId: 'r', name: 'agent', startMs: 0, endMs: 1 })], { 'service.name': 'checkout', 'service.version': '3.2.0' }));
+  assert.equal(a.metadata.appVersion, '3.2.0');
+  assert.equal(a.metadata.agentVersion, undefined);
+  // version d'agent et de prompt explicites sur le span racine
+  const b = normalize(otlpPayload([otlpSpan(tid, { spanId: 'r', name: 'agent', startMs: 0, endMs: 1, attrs: {
+    'trajekt.agent.version': sv('1.5.0'), 'trajekt.prompt.version': sv('v8'),
+  } })], { 'service.name': 'checkout', 'service.version': '3.2.0' }));
+  assert.equal(b.metadata.appVersion, '3.2.0');
+  assert.equal(b.metadata.agentVersion, '1.5.0');
+  assert.equal(b.metadata.promptVersion, 'v8');
+  // Langfuse : release = appli, version = agent
+  const lf = normalize({ ...langfuseTrace(), release: 'web-3.2.0', version: '1.5.0' });
+  assert.equal(lf.metadata.appVersion, 'web-3.2.0');
+  assert.equal(lf.metadata.agentVersion, '1.5.0');
+});
+
+test('Fusion : un lot sans racine n’écrase pas la version d’agent portée par la racine', () => {
+  const spans = sentryRun('ffff');
+  const root = spans[spans.length - 1];
+  root.attributes.push({ key: 'trajekt.agent.version', value: { stringValue: '1.5.0' } as any });
+  const [withRoot] = normalizeAll(otlpPayload([root]));
+  const [children] = normalizeAll(otlpPayload(spans.slice(0, 2))); // arrive APRÈS la racine
+  const merged = mergeTrajectories(withRoot, children);
+  assert.equal(merged.metadata.agentVersion, '1.5.0');
+  assert.equal(merged.metadata.appVersion, '1.4.0');
 });

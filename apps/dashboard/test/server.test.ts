@@ -6,7 +6,7 @@ import { ingestPayload } from '../src/server/ingest';
 import { createProject, verifyProjectApiKey, getDefaultProject } from '../src/server/auth';
 import {
   listAgents, agentTimeseries, agentVersions, compareRecentWindow, compareLatestVersions,
-  listRuns, getRun, previousRunId, projectStats,
+  listRuns, getRun, previousRunId, projectStats, compareValues,
 } from '../src/server/queries';
 import { checkRegressions, recentAlerts, slackMessage } from '../src/server/alerts';
 import { simulateTraffic, sentryTriageRun, rng } from '../src/server/simulate';
@@ -159,6 +159,62 @@ test('liste des runs : filtres et pagination stable', async () => {
 
   const stats = await projectStats(db, projectId, null);
   assert.ok(stats.totalRuns > 0 && stats.totalCostUsd > 0);
+});
+
+test('dimensions : versions d’appli, d’agent, de prompt et modèle', async () => {
+  const byDim = async (d: 'app' | 'agent' | 'prompt' | 'model') =>
+    (await agentVersions(db, projectId, 'sentry-triage', d)).map((v) => v.version);
+  assert.deepEqual(await byDim('app'), ['3.2.0', '3.1.0']);
+  assert.deepEqual(await byDim('agent'), ['1.5.0', '1.4.0']);
+  assert.deepEqual(await byDim('prompt'), ['v8', 'v7']);
+  assert.deepEqual((await byDim('model')).sort(), ['claude-sonnet-4-5', 'gpt-4.1-mini']);
+
+  const verdicts = (r: Awaited<ReturnType<typeof compareValues>>) =>
+    Object.fromEntries(r.comparisons.map((c) => [c.metric, c.verdict]));
+
+  // Prompt v7 → v8 (déployé avec l'agent 1.5.0) : la régression ressort.
+  const prompt = await compareValues(db, projectId, 'sentry-triage', 'prompt', 'v7', 'v8');
+  assert.equal(prompt.mode, 'ab');
+  assert.equal(prompt.dimension, 'prompt');
+  assert.equal(verdicts(prompt).redundantToolCalls, 'regression');
+
+  // Appli 3.1.0 → 3.2.0 AVANT le déploiement de l'agent 1.5.0 : rien ne change.
+  const beforeAgentDeploy = new Date(NOW.getTime() - 2 * 86400_000 - 3600_000);
+  const app = await compareValues(db, projectId, 'sentry-triage', 'app', '3.1.0', '3.2.0', { to: beforeAgentDeploy });
+  assert.ok(app.currentRuns >= 20 && app.baselineRuns >= 20);
+  assert.equal(app.comparisons.filter((c) => c.verdict === 'regression').length, 0);
+
+  // Modèle : gpt-4.1-mini coûte moins cher que claude-sonnet-4-5.
+  const model = await compareValues(db, projectId, 'sentry-triage', 'model', 'claude-sonnet-4-5', 'gpt-4.1-mini');
+  assert.equal(verdicts(model).costUsd, 'improvement');
+
+  // Dernière valeur vs précédente sur une autre dimension que l'agent.
+  const latestApp = await compareLatestVersions(db, projectId, 'sentry-triage', { dimension: 'app' });
+  assert.equal(latestApp?.currentLabel, '3.2.0');
+  assert.equal(latestApp?.baselineLabel, '3.1.0');
+
+  // Filtres de runs par dimension.
+  const mini = await listRuns(db, projectId, { agent: 'sentry-triage', model: 'gpt-4.1-mini', limit: 200 });
+  assert.ok(mini.items.length > 0 && mini.items.every((r) => r.primaryModel === 'gpt-4.1-mini'));
+  const v8 = await listRuns(db, projectId, { promptVersion: 'v8', appVersion: '3.2.0', limit: 5 });
+  assert.ok(v8.items.every((r) => r.promptVersion === 'v8' && r.appVersion === '3.2.0' && r.agentVersion === '1.5.0'));
+
+  // Série filtrée sur une valeur de dimension.
+  const ts = await agentTimeseries(db, projectId, 'sentry-triage', {
+    from: new Date(NOW.getTime() - 14 * 86400_000), to: NOW, bucket: 'day', dimension: 'prompt', version: 'v8',
+  });
+  assert.ok(ts.slice(0, 10).every((p) => p.runs === 0));
+  assert.ok(ts.slice(-2).every((p) => p.runs > 0));
+});
+
+test('version d’appli par en-tête, version d’agent qui la suit par défaut', async () => {
+  const aiSdk = { steps: [{ text: 'hi', usage: { promptTokens: 5, completionTokens: 2 }, toolCalls: [] }] };
+  const [run] = await ingestPayload(db, projectId, aiSdk, { agentName: 'header-bot', appVersion: '9.0.1' });
+  assert.equal(run.appVersion, '9.0.1');
+  assert.equal(run.agentVersion, '9.0.1');
+  const [explicit] = await ingestPayload(db, projectId, aiSdk, { agentName: 'header-bot', appVersion: '9.0.1', agentVersion: '2.0.0' });
+  assert.equal(explicit.agentVersion, '2.0.0');
+  await db.query("delete from trajectories where agent_name = 'header-bot'");
 });
 
 test('alertes : création, cooldown, message Slack', async () => {

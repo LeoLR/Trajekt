@@ -46,6 +46,7 @@ export interface TimeseriesPoint {
 }
 
 export interface VersionStats {
+  /** Valeur de la dimension (version, modèle…), null si absente. */
   version: string | null;
   firstSeen: string;
   lastSeen: string;
@@ -60,7 +61,9 @@ export interface VersionStats {
 }
 
 export interface ComparisonResult {
-  mode: 'window' | 'version';
+  /** window : fenêtres de temps ; version : dernière valeur vs précédente ; ab : deux valeurs choisies. */
+  mode: 'window' | 'version' | 'ab';
+  dimension?: Dimension;
   baselineLabel: string;
   currentLabel: string;
   baselineRuns: number;
@@ -72,7 +75,9 @@ export interface RunSummary {
   id: string;
   traceId: string | null;
   agentName: string;
+  appVersion: string | null;
   agentVersion: string | null;
+  promptVersion: string | null;
   status: 'ok' | 'error';
   startedAt: string;
   durationMs: number | null;
@@ -91,6 +96,22 @@ export interface RunSummary {
 /* ------------------------------------------------------------------ */
 /* Utilitaires                                                          */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Les axes sur lesquels on compare des runs. La colonne vient de cette
+ * liste blanche, jamais de l'entrée utilisateur.
+ */
+export const DIMENSIONS = {
+  app: { column: 'app_version', label: 'App version' },
+  agent: { column: 'agent_version', label: 'Agent version' },
+  prompt: { column: 'prompt_version', label: 'Prompt version' },
+  model: { column: 'primary_model', label: 'Model' },
+} as const;
+export type Dimension = keyof typeof DIMENSIONS;
+export function isDimension(v: unknown): v is Dimension {
+  return typeof v === 'string' && Object.prototype.hasOwnProperty.call(DIMENSIONS, v);
+}
+const col = (d: Dimension) => DIMENSIONS[d].column;
 
 const BUCKETS = { hour: 'hour', day: 'day' } as const;
 export type Bucket = keyof typeof BUCKETS;
@@ -177,14 +198,14 @@ export async function agentTimeseries(
   db: Db,
   projectId: string,
   agent: string,
-  opts: { from: Date; to: Date; bucket: Bucket; version?: string },
+  opts: { from: Date; to: Date; bucket: Bucket; version?: string; dimension?: Dimension },
 ): Promise<TimeseriesPoint[]> {
   const unit = BUCKETS[opts.bucket];
   const params: unknown[] = [projectId, agent, opts.from.toISOString(), opts.to.toISOString()];
   let versionFilter = '';
   if (opts.version !== undefined) {
     params.push(opts.version);
-    versionFilter = `and agent_version is not distinct from $${params.length}`;
+    versionFilter = `and ${col(opts.dimension ?? 'agent')} is not distinct from $${params.length}`;
   }
   const rows = await db.query<Record<string, unknown>>(
     `select to_char(date_trunc('${unit}', started_at at time zone 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as bucket,
@@ -241,10 +262,17 @@ function floorUtc(d: Date, bucket: Bucket): Date {
 /* Versions                                                             */
 /* ------------------------------------------------------------------ */
 
-export async function agentVersions(db: Db, projectId: string, agent: string): Promise<VersionStats[]> {
+/**
+ * Métriques par valeur d'une dimension (par défaut : la version d'agent),
+ * la plus récente (première apparition) d'abord.
+ */
+export async function agentVersions(
+  db: Db, projectId: string, agent: string, dimension: Dimension = 'agent',
+): Promise<VersionStats[]> {
+  const c = col(dimension);
   const rows = await db.query<Record<string, unknown>>(
     `with v as (
-       select agent_version,
+       select ${c} as value,
               min(started_at) as first_seen,
               max(started_at) as last_seen,
               count(*)::int as runs,
@@ -255,22 +283,22 @@ export async function agentVersions(db: Db, projectId: string, agent: string): P
               avg(redundant_tool_calls)::float8 as avg_redundant
          from trajectories
         where project_id = $1 and agent_name = $2
-        group by agent_version
+        group by ${c}
      ),
      p as (
-       select distinct on (agent_version) agent_version, path_signature, count(*)::int as c
+       select distinct on (${c}) ${c} as value, path_signature, count(*)::int as c
          from trajectories
         where project_id = $1 and agent_name = $2
-        group by agent_version, path_signature
-        order by agent_version, count(*) desc, path_signature
+        group by ${c}, path_signature
+        order by ${c}, count(*) desc, path_signature
      )
      select v.*, p.path_signature as top_path, p.c as top_path_runs
-       from v left join p on p.agent_version is not distinct from v.agent_version
+       from v left join p on p.value is not distinct from v.value
       order by v.first_seen desc`,
     [projectId, agent],
   );
   return rows.map((r) => ({
-    version: (r.agent_version as string | null) ?? null,
+    version: (r.value as string | null) ?? null,
     firstSeen: iso(r.first_seen as Date),
     lastSeen: iso(r.last_seen as Date),
     runs: Number(r.runs),
@@ -291,8 +319,10 @@ export async function agentVersions(db: Db, projectId: string, agent: string): P
 interface Population {
   from?: Date;
   to?: Date;
-  /** undefined = toutes versions ; null = runs sans version. */
+  /** undefined = toutes valeurs ; null = runs sans valeur. */
   version?: string | null;
+  /** Dimension à laquelle s'applique `version` (défaut : agent). */
+  dimension?: Dimension;
 }
 
 function populationFilter(p: Population, params: unknown[]): string {
@@ -307,7 +337,7 @@ function populationFilter(p: Population, params: unknown[]): string {
   }
   if (p.version !== undefined) {
     params.push(p.version);
-    parts.push(`agent_version is not distinct from $${params.length}`);
+    parts.push(`${col(p.dimension ?? 'agent')} is not distinct from $${params.length}`);
   }
   return parts.length ? 'and ' + parts.join(' and ') : '';
 }
@@ -406,23 +436,50 @@ export async function compareRecentWindow(
 }
 
 /**
- * La dernière version déployée (par première apparition) comparée à la
- * précédente. null s'il n'y a pas deux versions à comparer.
+ * La dernière valeur d'une dimension (par première apparition) comparée à
+ * la précédente — par défaut la version d'agent. null s'il n'y a pas
+ * deux valeurs à comparer.
  */
 export async function compareLatestVersions(
-  db: Db, projectId: string, agent: string, o: { minRuns?: number } = {},
+  db: Db, projectId: string, agent: string, o: { minRuns?: number; dimension?: Dimension } = {},
 ): Promise<ComparisonResult | null> {
-  const versions = (await agentVersions(db, projectId, agent)).filter((v) => v.version !== null);
+  const dimension = o.dimension ?? 'agent';
+  const versions = (await agentVersions(db, projectId, agent, dimension)).filter((v) => v.version !== null);
   if (versions.length < 2) return null;
   const [cur, prev] = versions; // tri : première apparition décroissante
   const [baseline, current] = await Promise.all([
-    windowStats(db, projectId, agent, { version: prev.version }),
-    windowStats(db, projectId, agent, { version: cur.version }),
+    windowStats(db, projectId, agent, { version: prev.version, dimension }),
+    windowStats(db, projectId, agent, { version: cur.version, dimension }),
   ]);
   return {
     mode: 'version',
+    dimension,
     baselineLabel: prev.version!,
     currentLabel: cur.version!,
+    baselineRuns: baseline.runs,
+    currentRuns: current.runs,
+    comparisons: compareWindows(baseline, current, { minRuns: o.minRuns }),
+  };
+}
+
+/**
+ * Deux valeurs choisies d'une même dimension : A (référence) contre B.
+ * Ex. app 3.1.0 vs 3.2.0, prompt v7 vs v8, gpt-4o vs claude-sonnet-4-5.
+ * Optionnellement restreint à une fenêtre de temps.
+ */
+export async function compareValues(
+  db: Db, projectId: string, agent: string, dimension: Dimension, a: string, b: string,
+  o: { minRuns?: number; from?: Date; to?: Date } = {},
+): Promise<ComparisonResult> {
+  const [baseline, current] = await Promise.all([
+    windowStats(db, projectId, agent, { version: a, dimension, from: o.from, to: o.to }),
+    windowStats(db, projectId, agent, { version: b, dimension, from: o.from, to: o.to }),
+  ]);
+  return {
+    mode: 'ab',
+    dimension,
+    baselineLabel: a,
+    currentLabel: b,
     baselineRuns: baseline.runs,
     currentRuns: current.runs,
     comparisons: compareWindows(baseline, current, { minRuns: o.minRuns }),
@@ -435,7 +492,11 @@ export async function compareLatestVersions(
 
 export interface ListRunsOptions {
   agent?: string;
+  /** Version d'agent. */
   version?: string;
+  appVersion?: string;
+  promptVersion?: string;
+  model?: string;
   status?: 'ok' | 'error';
   /** Ne garder que les runs qui bouclent (appels d'outil répétés). */
   loopsOnly?: boolean;
@@ -445,7 +506,7 @@ export interface ListRunsOptions {
   cursor?: { startedAt: string; id: string };
 }
 
-const SUMMARY_COLS = `id, trace_id, agent_name, agent_version, status, started_at, duration_ms,
+const SUMMARY_COLS = `id, trace_id, agent_name, app_version, agent_version, prompt_version, status, started_at, duration_ms,
   step_count, tool_call_count, tool_error_count, redundant_tool_calls, retry_count,
   cost_usd::float8 as cost_usd, cost_estimated, primary_model, path_signature, source_format`;
 
@@ -454,7 +515,9 @@ function toSummary(r: Record<string, unknown>): RunSummary {
     id: String(r.id),
     traceId: (r.trace_id as string | null) ?? null,
     agentName: String(r.agent_name),
+    appVersion: (r.app_version as string | null) ?? null,
     agentVersion: (r.agent_version as string | null) ?? null,
+    promptVersion: (r.prompt_version as string | null) ?? null,
     status: r.status as 'ok' | 'error',
     startedAt: iso(r.started_at as Date),
     durationMs: n(r.duration_ms),
@@ -483,6 +546,9 @@ export async function listRuns(
   };
   if (o.agent) add((i) => `agent_name = $${i}`, o.agent);
   if (o.version) add((i) => `agent_version = $${i}`, o.version);
+  if (o.appVersion) add((i) => `app_version = $${i}`, o.appVersion);
+  if (o.promptVersion) add((i) => `prompt_version = $${i}`, o.promptVersion);
+  if (o.model) add((i) => `primary_model = $${i}`, o.model);
   if (o.status) add((i) => `status = $${i}`, o.status);
   if (o.loopsOnly) where.push('redundant_tool_calls > 0');
   if (o.from) add((i) => `started_at >= $${i}::timestamptz`, o.from.toISOString());
@@ -587,9 +653,10 @@ export async function projectStats(db: Db, projectId: string, since: Date | null
 
 export async function topPaths(
   db: Db, projectId: string, agent: string, version: string | null | undefined, limit = 5,
+  dimension: Dimension = 'agent',
 ): Promise<{ total: number; paths: Array<{ path: string; runs: number; share: number }> }> {
   const params: unknown[] = [projectId, agent];
-  const filter = populationFilter({ version }, params);
+  const filter = populationFilter({ version, dimension }, params);
   params.push(limit);
   const rows = await db.query<{ path_signature: string; c: number; total: number }>(
     `select path_signature, count(*)::int as c, (sum(count(*)) over ())::int as total

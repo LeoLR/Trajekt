@@ -118,6 +118,12 @@ export interface TrajectoryMetadata {
   traceId?: string;
   /** Nom de l'agent — l'axe principal de suivi dans le temps. */
   agentName?: string;
+  /**
+   * Version de l'application qui embarque l'agent (le service déployé).
+   * Distincte de agentVersion quand l'agent évolue à son propre rythme.
+   */
+  appVersion?: string;
+  /** Version de l'agent lui-même (code, outils, orchestration). */
   agentVersion?: string;
   environment?: string;
   /**

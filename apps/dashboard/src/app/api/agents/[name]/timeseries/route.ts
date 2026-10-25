@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { dashboardRoute, parseDate } from '../../../../../lib/route';
 import { apiError } from '../../../../../lib/errors';
-import { agentTimeseries, type Bucket } from '../../../../../server/queries';
+import { agentTimeseries, isDimension, type Bucket } from '../../../../../server/queries';
 
 const MAX_POINTS = 24 * 31;
 
 /**
- * GET /api/agents/:name/timeseries?from&to&bucket=hour|day&version
+ * GET /api/agents/:name/timeseries?from&to&bucket=hour|day&dimension=app|agent|prompt|model&version
  * Défaut : 14 derniers jours, par jour.
  */
 export const GET = dashboardRoute(async ({ req, db, project }) => {
@@ -22,8 +22,10 @@ export const GET = dashboardRoute(async ({ req, db, project }) => {
     return apiError('VALIDATION_ERROR', `Range too large for bucket=${bucket} (max ${MAX_POINTS} points).`);
   }
   const version = p.has('version') ? p.get('version')! : undefined;
+  const dimension = p.get('dimension') ?? 'agent';
+  if (!isDimension(dimension)) return apiError('VALIDATION_ERROR', 'dimension must be app, agent, prompt or model.');
   return NextResponse.json({
     agent: name, bucket, from: from.toISOString(), to: to.toISOString(),
-    points: await agentTimeseries(db, project.id, name, { from, to, bucket, version }),
+    points: await agentTimeseries(db, project.id, name, { from, to, bucket, version, dimension }),
   });
 });

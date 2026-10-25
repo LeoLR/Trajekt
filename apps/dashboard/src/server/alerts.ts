@@ -56,16 +56,30 @@ export async function checkRegressions(db: Db, projectId: string, o: CheckOption
     const results: ComparisonResult[] = [
       await compareRecentWindow(db, projectId, agent, { now, minRuns: o.minRuns }),
     ];
-    const versions = await agentVersions(db, projectId, agent);
-    const latest = versions.find((v) => v.version !== null);
-    if (latest && now.getTime() - new Date(latest.firstSeen).getTime() <= 7 * DAY) {
-      const byVersion = await compareLatestVersions(db, projectId, agent, { minRuns: o.minRuns });
-      if (byVersion) results.push(byVersion);
+    // Une nouvelle valeur (agent, prompt ou appli) de moins de 7 jours est
+    // comparée à la précédente : un changement de prompt sans nouvelle
+    // version d'agent doit aussi pouvoir déclencher une alerte.
+    for (const dimension of ['agent', 'prompt', 'app'] as const) {
+      const versions = await agentVersions(db, projectId, agent, dimension);
+      const latest = versions.find((v) => v.version !== null);
+      if (!latest || now.getTime() - new Date(latest.firstSeen).getTime() > 7 * DAY) continue;
+      const byVersion = await compareLatestVersions(db, projectId, agent, { minRuns: o.minRuns, dimension });
+      if (!byVersion) continue;
+      if (dimension !== 'agent') {
+        byVersion.baselineLabel = `${dimension} ${byVersion.baselineLabel}`;
+        byVersion.currentLabel = `${dimension} ${byVersion.currentLabel}`;
+      }
+      results.push(byVersion);
     }
+    // Une seule alerte par métrique et par mode : la première trouvée
+    // (fenêtre, puis agent, prompt, appli) suffit à signaler le problème.
+    const seen = new Set<string>();
     for (const r of results) {
+      const mode = r.mode === 'window' ? 'window' : 'version';
       for (const c of r.comparisons) {
-        if (c.verdict !== 'regression') continue;
-        candidates.push({ agentName: agent, mode: r.mode, baselineLabel: r.baselineLabel, currentLabel: r.currentLabel, comparison: c });
+        if (c.verdict !== 'regression' || seen.has(`${mode}:${c.metric}`)) continue;
+        seen.add(`${mode}:${c.metric}`);
+        candidates.push({ agentName: agent, mode, baselineLabel: r.baselineLabel, currentLabel: r.currentLabel, comparison: c });
       }
     }
   }

@@ -21,10 +21,28 @@ export function RunsView({ data, now, nextHref }: { data: RunsPageData; now: str
             {data.agents.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </label>
+        {data.appVersions.length > 0 && (
+          <select name="appVersion" defaultValue={f.appVersion ?? ''} aria-label="App version">
+            <option value="">All app versions</option>
+            {data.appVersions.map((v) => <option key={v} value={v}>app {v}</option>)}
+          </select>
+        )}
         {data.versions.length > 0 && (
-          <select name="version" defaultValue={f.version ?? ''} aria-label="Version">
-            <option value="">All versions</option>
-            {data.versions.map((v) => <option key={v} value={v}>{v}</option>)}
+          <select name="version" defaultValue={f.version ?? ''} aria-label="Agent version">
+            <option value="">All agent versions</option>
+            {data.versions.map((v) => <option key={v} value={v}>agent {v}</option>)}
+          </select>
+        )}
+        {data.promptVersions.length > 0 && (
+          <select name="promptVersion" defaultValue={f.promptVersion ?? ''} aria-label="Prompt version">
+            <option value="">All prompt versions</option>
+            {data.promptVersions.map((v) => <option key={v} value={v}>prompt {v}</option>)}
+          </select>
+        )}
+        {data.models.length > 0 && (
+          <select name="model" defaultValue={f.model ?? ''} aria-label="Model">
+            <option value="">All models</option>
+            {data.models.map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
         )}
         <select name="status" defaultValue={f.status ?? ''} aria-label="Status">

@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
   try {
     const runs = await ingestPayload(db, project.id, raw, {
       agentName: req.headers.get('x-trajekt-agent') ?? undefined,
+      appVersion: req.headers.get('x-trajekt-app-version') ?? undefined,
       agentVersion: req.headers.get('x-trajekt-agent-version') ?? undefined,
       promptVersion: req.headers.get('x-trajekt-prompt-version') ?? undefined,
       environment: req.headers.get('x-trajekt-environment') ?? undefined,

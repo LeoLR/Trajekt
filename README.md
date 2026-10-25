@@ -29,7 +29,8 @@ Logs tell you what an agent *said*. Trajekt shows you what it *did*.
 - **Replay any run** — every step on a timeline, with the prompt, the model's output, the exact tool arguments and what each tool returned.
 - **See where it went wrong** — repeated tool calls (same tool, same arguments), retries after a failure and failed steps are flagged on the timeline.
 - **Know what each step cost** — tokens, latency and cost per step and per run. Cost comes from the trace when the source provides it, and is otherwise estimated from tokens (and labelled as such).
-- **Catch regressions** — runs are grouped per agent and version. Trajekt compares the latest version with the previous one (and the last 24 h with the 7 days before) on failure rate, cost, duration, steps, tokens, loops and tool paths, and can post new regressions to Slack.
+- **Compare versions** — every run carries an app version, an agent version, a prompt version and a model. Compare any two values of any of them: prompt `v7` against `v8`, app `3.1.0` against `3.2.0`, your current model against a cheaper one.
+- **Catch regressions** — Trajekt compares each new agent, prompt or app version with the previous one (and the last 24 h with the 7 days before) on failure rate, cost, duration, steps, tokens, loops and tool paths, and can post new regressions to Slack.
 
 ## Quickstart
 
@@ -100,7 +101,11 @@ await generateText({
 });
 ```
 
-Trajekt recognises spans that follow the OpenTelemetry GenAI semantic conventions (`gen_ai.*`) and the Vercel AI SDK telemetry spans (`ai.*`). Set `service.version` (or the `trajekt.agent.version` span attribute) so runs are grouped per version.
+Trajekt recognises spans that follow the OpenTelemetry GenAI semantic conventions (`gen_ai.*`) and the Vercel AI SDK telemetry spans (`ai.*`). Set `service.version` for the app version, and `trajekt.agent.version` / `trajekt.prompt.version` when the agent or its prompt change on their own:
+
+```bash
+OTEL_RESOURCE_ATTRIBUTES=service.version=3.2.0,trajekt.agent.version=1.5.0,trajekt.prompt.version=v8
+```
 
 #### Send a trace file
 

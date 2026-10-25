@@ -4,7 +4,7 @@ import { apiError } from '../../../lib/errors';
 import { listRuns } from '../../../server/queries';
 
 /**
- * GET /api/runs?agent&version&status=ok|error&loops=1&from&to&limit&cursor
+ * GET /api/runs?agent&version&appVersion&promptVersion&model&status=ok|error&loops=1&from&to&limit&cursor
  * Liste légère (jamais les steps), pagination par curseur (started_at, id).
  */
 export const GET = dashboardRoute(async ({ req, db, project }) => {
@@ -22,6 +22,9 @@ export const GET = dashboardRoute(async ({ req, db, project }) => {
   const page = await listRuns(db, project.id, {
     agent: p.get('agent') ?? undefined,
     version: p.get('version') ?? undefined,
+    appVersion: p.get('appVersion') ?? undefined,
+    promptVersion: p.get('promptVersion') ?? undefined,
+    model: p.get('model') ?? undefined,
     status: (status as 'ok' | 'error' | null) ?? undefined,
     loopsOnly: p.get('loops') === '1',
     from, to, cursor,
