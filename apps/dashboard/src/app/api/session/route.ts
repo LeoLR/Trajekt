@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { passwordMatches } from '../../../server/auth';
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, createSessionToken } from '../../../lib/session';
 import { apiError } from '../../../lib/errors';
+import { isDemo } from '../../../lib/demo';
 
 export const runtime = 'nodejs';
 
@@ -22,6 +23,7 @@ function cookieOptions() {
 }
 
 export async function POST(req: NextRequest) {
+  if (isDemo()) return NextResponse.redirect(new URL('/', req.url), 303);
   const expected = process.env.DASHBOARD_PASSWORD;
   if (!expected) return apiError('NOT_CONFIGURED', 'Set DASHBOARD_PASSWORD to enable sign-in.');
 

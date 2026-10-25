@@ -9,7 +9,7 @@ import { compareLatestVersions, compareRecentWindow, compareValues, isDimension 
  *   mode=version dernière valeur de `dimension` vs la précédente
  *   mode=ab      deux valeurs choisies : dimension=app|agent|prompt|model&a=<A>&b=<B>[&from&to]
  */
-export const GET = dashboardRoute(async ({ req, db, project }) => {
+export const GET = dashboardRoute(async ({ req, db, project, now }) => {
   const name = decodeURIComponent(req.nextUrl.pathname.split('/')[3] ?? '');
   const p = req.nextUrl.searchParams;
   const mode = p.get('mode') ?? 'window';
@@ -36,5 +36,5 @@ export const GET = dashboardRoute(async ({ req, db, project }) => {
   if (!(currentHours > 0 && currentHours <= 24 * 7 && baselineDays > 0 && baselineDays <= 60)) {
     return apiError('VALIDATION_ERROR', 'currentHours must be in (0, 168], baselineDays in (0, 60].');
   }
-  return NextResponse.json(await compareRecentWindow(db, project.id, name, { currentHours, baselineDays }));
+  return NextResponse.json(await compareRecentWindow(db, project.id, name, { now, currentHours, baselineDays }));
 });

@@ -48,7 +48,10 @@ export function getDb(): Db {
   if (instance) return instance;
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL manquant — voir .env.example');
-  instance = wrap(postgres(url, { max: 10, onnotice: () => {} }));
+  // Derrière un pooler en mode transaction (Neon "-pooler", PgBouncer,
+  // Supavisor), les requêtes préparées nommées ne sont pas fiables.
+  const pooled = /-pooler\.|pgbouncer=true|:6543\//.test(url);
+  instance = wrap(postgres(url, { max: 10, onnotice: () => {}, prepare: !pooled }));
   // Surcharge de la table de prix (estimation du coût des spans OTel).
   if (process.env.TRAJEKT_PRICING) setPricing(JSON.parse(process.env.TRAJEKT_PRICING));
   return instance;

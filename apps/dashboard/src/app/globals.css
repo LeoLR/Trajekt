@@ -197,3 +197,11 @@ pre.code { margin: 0; background: var(--bg); border: 1px solid var(--border); bo
 a.dim-chip:hover { border-color: var(--text-4); color: var(--text); }
 .dim-chip.is-disabled { opacity: 0.45; cursor: not-allowed; }
 .ab-form { margin-bottom: 0; }
+
+/* ---------- Démo ---------- */
+.demo-banner { display: flex; align-items: center; gap: 12px; max-width: 1200px; margin: 16px auto 0; padding: 10px 14px; border: 1px solid var(--amber-line); background: var(--amber-soft); border-radius: 10px; font-size: 13px; color: var(--text-2); width: calc(100% - 48px); }
+.demo-banner strong { color: var(--amber); font-weight: 600; }
+.demo-banner code { color: var(--text); font-size: 12px; }
+.demo-hatch { flex-shrink: 0; width: 22px; height: 8px; border-radius: 2px; background: var(--hatch); }
+a.signout { display: inline-flex; align-items: center; }
+@media (max-width: 640px) { .demo-banner { width: calc(100% - 32px); } }

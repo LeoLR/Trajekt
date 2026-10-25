@@ -6,8 +6,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { SESSION_COOKIE, isValidSessionToken } from './lib/session';
+import { isDemo } from './lib/demo';
 
 export async function middleware(req: NextRequest) {
+  if (isDemo()) return NextResponse.next();
   const ok = await isValidSessionToken(req.cookies.get(SESSION_COOKIE)?.value).catch(() => false);
   if (ok) return NextResponse.next();
   const url = new URL('/login', req.url);

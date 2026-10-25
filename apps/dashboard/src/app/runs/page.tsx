@@ -13,7 +13,7 @@ type Search = {
 
 export default async function RunsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
-  const { db, project } = await pageContext();
+  const { db, project, now } = await pageContext();
   if (!project) return <SetupView />;
   const filters = {
     agent: sp.agent || undefined,
@@ -34,5 +34,5 @@ export default async function RunsPage({ searchParams }: { searchParams: Promise
     q.set('cursor', encodeCursor(data.nextCursor));
     nextHref = `/runs?${q}`;
   }
-  return <RunsView data={data} now={new Date().toISOString()} nextHref={nextHref} />;
+  return <RunsView data={data} now={now.toISOString()} nextHref={nextHref} />;
 }

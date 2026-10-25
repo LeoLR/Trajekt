@@ -14,10 +14,12 @@ import { getDb } from '../../../server/db';
 import { verifyProjectApiKey } from '../../../server/auth';
 import { ingestPayload } from '../../../server/ingest';
 import { apiError } from '../../../lib/errors';
+import { isDemo } from '../../../lib/demo';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  if (isDemo()) return apiError('FORBIDDEN', 'This is a read-only demo instance: ingestion is disabled.');
   const db = getDb();
   const project = await verifyProjectApiKey(db, req.headers.get('authorization'));
   if (!project) return apiError('UNAUTHORIZED', 'Missing or invalid project API key.');

@@ -1,6 +1,7 @@
 /** Petits composants partagés, sans état (rendables côté serveur). */
 
 import type { ReactNode } from 'react';
+import { isDemo } from '../lib/demo';
 import type { Comparison } from '@trajekt/core';
 
 export function LogoMark({ size = 20 }: { size?: number }) {
@@ -37,11 +38,21 @@ export function Shell({ active, children }: { active?: 'agents' | 'runs' | 'expl
               <a key={href} href={href} aria-current={active === key ? 'page' : undefined}>{label}</a>
             ))}
           </nav>
-          <form action="/logout" method="post">
-            <button className="signout" type="submit">Sign out</button>
-          </form>
+          {isDemo() ? (
+            <a className="signout" href="https://trajekt-eight.vercel.app/docs/#quickstart">Self-host it</a>
+          ) : (
+            <form action="/logout" method="post">
+              <button className="signout" type="submit">Sign out</button>
+            </form>
+          )}
         </div>
       </header>
+      {isDemo() && (
+        <div className="demo-banner" role="note">
+          <span className="demo-hatch" aria-hidden="true" />
+          <span><strong>Live demo</strong> — simulated traces from two agents. <code className="mono">sentry-triage</code> regressed when agent 1.5.0 and prompt v8 shipped; <code className="mono">support-bot</code> is healthy. Read-only.</span>
+        </div>
+      )}
       <main className="page">{children}</main>
     </>
   );

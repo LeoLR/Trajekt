@@ -31,6 +31,7 @@ export type ApiErrorCode =
   | 'UNKNOWN_FORMAT'
   | 'UNSUPPORTED_MEDIA_TYPE'
   | 'NOT_FOUND'
+  | 'FORBIDDEN'
   | 'RATE_LIMITED'
   | 'NOT_CONFIGURED'
   | 'INTERNAL_ERROR';

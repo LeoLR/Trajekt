@@ -15,11 +15,11 @@ export default async function AgentPage({
 }) {
   const { name } = await params;
   const { compare, dim, a, b } = await searchParams;
-  const { db, project } = await pageContext();
+  const { db, project, now } = await pageContext();
   if (!project) return <SetupView />;
   const mode = compare === 'window' || compare === 'version' || compare === 'ab' ? compare : undefined;
   const dimension = isDimension(dim) ? dim : undefined;
-  const data = await loadAgentPage(db, project.id, decodeURIComponent(name), { mode, dimension, a, b });
+  const data = await loadAgentPage(db, project.id, decodeURIComponent(name), { mode, dimension, a, b, now });
   if (!data) notFound();
   return <AgentView data={data} />;
 }
