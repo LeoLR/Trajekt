@@ -25,8 +25,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # Pas encore de lockfile versionné (voir README).
-      - run: pnpm install --no-frozen-lockfile
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @trajekt/core build
       - name: Library tests
         run: pnpm --filter @trajekt/core test
