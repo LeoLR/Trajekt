@@ -15,7 +15,8 @@
     "preview": "tsx --tsconfig tsconfig.test.json scripts/preview.tsx preview",
     "typecheck": "tsc --noEmit",
     "vercel-build": "tsx scripts/vercel-build.ts && next build",
-    "create-read-key": "tsx scripts/create-read-key.ts"
+    "create-read-key": "tsx scripts/create-read-key.ts",
+    "import-langfuse": "tsx scripts/import-langfuse.ts"
   },
   "dependencies": {
     "@trajekt/core": "workspace:*",

@@ -24,6 +24,7 @@ export function pct(x) {
 
 function fmt(metric, v) {
   if (v === null || v === undefined) return '—';
+  if (metric.startsWith('score:')) return v.toFixed(2);
   switch (metric) {
     case 'errorRate': case 'toolErrorRate': case 'newPathShare': return `${(v * 100).toFixed(1)}%`;
     case 'durationMs': return v < 1000 ? `${Math.round(v)}ms` : `${(v / 1000).toFixed(1)}s`;
@@ -35,6 +36,7 @@ function fmt(metric, v) {
 
 function change(m) {
   if (m.metric === 'newPathShare' || m.delta === null || m.delta === undefined) return '';
+  if (m.metric.startsWith('score:')) return `${m.delta > 0 ? '+' : '−'}${Math.abs(m.delta).toFixed(2)}`;
   if (m.metric === 'errorRate' || m.metric === 'toolErrorRate') {
     return `${m.delta > 0 ? '+' : '−'}${(Math.abs(m.delta) * 100).toFixed(1)} pts`;
   }
@@ -46,6 +48,7 @@ const VERDICT = { regression: '🔴 regression', improvement: '🟢 better', sta
 function scenarioChanges(s) {
   return s.changes.map((c) => {
     if (c.metric === 'errorRate') return `**${c.label}** (${c.detail})`;
+    if (c.metric.startsWith('score:')) return `**${c.label} ${fmt(c.metric, c.baseline)} → ${fmt(c.metric, c.current)}**`;
     if (c.metric === 'newPathShare') return 'tool path changed';
     if (c.relDelta !== null && c.relDelta !== undefined) return `${c.label} ${pct(c.relDelta)}`;
     return `${c.label} ${fmt(c.metric, c.baseline)} → ${fmt(c.metric, c.current)}`;

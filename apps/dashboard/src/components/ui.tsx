@@ -76,7 +76,7 @@ export function VerdictChip({ c }: { c: Comparison }) {
   }
   if (c.verdict === 'improvement') return <span className="chip chip-ok">better</span>;
   if (c.verdict === 'insufficient') return <span className="chip" title={c.detail}>not enough data</span>;
-  return <span className="chip">stable</span>;
+  return <span className="chip" title={c.detail}>stable</span>;
 }
 
 export function Kpi({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {

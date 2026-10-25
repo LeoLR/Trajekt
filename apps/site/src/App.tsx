@@ -197,10 +197,11 @@ export function App() {
             <pre className="code mono" tabIndex={0} aria-label="@trajekt/core example">{CORE_SNIPPET}</pre>
             <div className="works-with">
               <span>Works with</span>
-              <span className="tag mono">OpenTelemetry · OTLP/HTTP JSON</span>
+              <span className="tag mono">OpenTelemetry · OTLP/HTTP JSON &amp; protobuf</span>
               <span className="tag mono">GenAI semantic conventions</span>
               <span className="tag mono">Vercel AI SDK</span>
-              <span className="tag mono">Langfuse trace exports</span>
+              <span className="tag mono">OpenInference · LangChain, LlamaIndex</span>
+              <span className="tag mono">Langfuse import</span>
             </div>
           </div>
         </section>

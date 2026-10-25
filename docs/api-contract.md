@@ -27,8 +27,15 @@ Toujours la même forme : `{ "error": { "code": string, "message": string } }`.
 
 ## `POST /v1/traces` — ingestion
 
-Corps : OTLP/JSON (`resourceSpans`), export de trace Langfuse, résultat
-`generateText` du Vercel AI SDK, ou `Trajectory` native. `Content-Encoding: gzip` accepté.
+Corps : OTLP en JSON (`resourceSpans`) ou en protobuf (`Content-Type:
+application/x-protobuf`, réponse protobuf vide en 200), export de trace
+Langfuse, résultat `generateText` du Vercel AI SDK, ou `Trajectory` native.
+`Content-Encoding: gzip` accepté. Spans compris : conventions GenAI d'OTel,
+Vercel AI SDK, OpenInference, OpenLLMetry.
+
+Limites : `429 RATE_LIMITED` (+ `Retry-After`) au-delà de
+`TRAJEKT_INGEST_RATE_PER_MIN` requêtes par minute et par projet (600) ;
+`413 PAYLOAD_TOO_LARGE` au-delà de `TRAJEKT_MAX_BODY_MB` décompressés (20).
 
 En-têtes optionnels, utilisés **seulement si la trace n'en porte pas** :
 `X-Trajekt-Agent`, `X-Trajekt-App-Version`, `X-Trajekt-Agent-Version`,
@@ -63,6 +70,24 @@ run sont recalculées. Renvoyer un lot est sans effet (steps indexés par span i
   ]
 }
 ```
+
+---
+
+## `POST /v1/scores` — scores de qualité
+
+Clé d'ingestion. Un score, une liste, ou `{ "scores": [...] }` (500 max).
+Plus haut = mieux, de préférence entre 0 et 1. Un score envoyé ainsi n'est
+jamais écrasé par celui que porte la trace (`trajekt.score.<nom>`).
+
+```json
+{ "traceId": "4bf92f35…", "name": "correct", "value": 0, "comment": "wrong Jira project" }
+```
+
+`201` avec `{ "scores": [{ "name", "runId", "ok", "error"? }] }` ; `404` si
+aucun run n'a été trouvé (envoyer la trace d'abord). `runId` (uuid Trajekt)
+remplace `traceId` au besoin. Les comparaisons (`/compare`, `/evals`,
+alertes) incluent chaque score présent des deux côtés, sous la clé
+`score:<nom>` ; une baisse est une régression.
 
 ---
 
@@ -146,8 +171,9 @@ scénario**. Sans `a`/`b` : la valeur la plus récente contre la précédente.
 ```
 
 `metrics` : test des rangs signés de Wilcoxon apparié, unilatéral,
-p < 0,05, écart minimum +15 % (rapport géométrique pour durée, coût,
-steps, tokens) ou +5 points sur un taux, 5 scénarios minimum.
+p < 0,05 après correction de Holm sur l'ensemble des métriques, écart
+minimum +15 % (rapport géométrique pour durée, coût, steps, tokens), +5
+points sur un taux ou −0,05 sur un score, 8 scénarios minimum.
 `result` vaut `fail` si une métrique régresse sur la suite ou si un scénario
 se met à échouer ; un nouveau chemin d'outils n'est jamais bloquant.
 
@@ -200,9 +226,16 @@ régression nouvelle (pas d'alerte identique agent + métrique + mode depuis
 { "agentsChecked": 2, "regressions": 9, "alertsCreated": 9, "suppressedByCooldown": 0, "notified": true }
 ```
 
+## Projets
+
+`GET /api/projects` et `POST /api/projects { "name" }` (session du
+dashboard) : la liste, ou un nouveau projet avec ses clés d'ingestion et
+de lecture, renvoyées une seule fois. `POST /api/projects/current
+{ "projectId" }` change le projet affiché. Les clés d'API sont propres à
+un projet ; `POST /api/alerts/check` traite tous les projets et purge les
+runs plus vieux que `TRAJEKT_RETENTION_DAYS`.
+
 ## Pas encore fait
 
-- OTLP protobuf / gRPC
-- Plusieurs comptes et projets dans l'interface (un mot de passe, un projet)
-- Rétention automatique, rate limiting
-- Annotations de qualité (scores, feedback utilisateur) dans les comparaisons
+- OTLP gRPC
+- Plusieurs comptes utilisateurs (un mot de passe par instance)

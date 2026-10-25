@@ -12,7 +12,7 @@ npx tsx examples/eval-suite/compare.ts v1 v2   # FAIL, exit code 1
 npx tsx examples/eval-suite/compare.ts v2 v1   # PASS
 ```
 
-`v2` imitates a common regression: when the code search returns several files, it runs the same search again instead of reading the right file.
+`v2` imitates a common regression: when the code search returns several files, it runs the same search again instead of reading the right file — and sometimes reads the wrong one. Each run carries a quality score, `correct` (did it read the file of the issue?), so the suite fails on the scenario where `v2` goes wrong (`correct` 1.00 → 0.33) even though only four scenarios out of eight changed — too few for a verdict across the suite.
 
 In your project:
 

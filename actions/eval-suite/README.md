@@ -28,6 +28,6 @@ The runs must already be in Trajekt: tagged with `trajekt.scenario` and with the
 
 Outputs: `result` (`pass` or `fail`) and `report-url` (the comparison in the dashboard).
 
-The suite fails when a metric regresses across the suite (paired test, at least 5 scenarios) or when a scenario starts failing. A new tool path is reported but never fails it. Details: [Testing your agent](https://trajekt-eight.vercel.app/docs/#eval-ci).
+The suite fails when a metric regresses across the suite (paired test, at least 8 scenarios), when a scenario starts failing, or when a scenario's quality score drops by 0.5 or more. A new tool path is reported but never fails it. Details: [Testing your agent](https://trajekt-eight.vercel.app/docs/#eval-ci).
 
 No dependency: plain Node 20 and `fetch`.

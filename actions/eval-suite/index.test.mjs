@@ -11,6 +11,7 @@ const data = {
     reasons: ['refund-rounding: 0/3 → 2/3 failed'],
     metrics: [
       { metric: 'costUsd', label: 'Mean cost', baseline: 0.0468, current: 0.0606, delta: 0.0138, relDelta: 0.263, verdict: 'regression' },
+      { metric: 'score:correct', label: 'Score · correct', baseline: 1, current: 0.89, delta: -0.11, relDelta: -0.11, verdict: 'stable' },
       { metric: 'errorRate', label: 'Failed runs', baseline: 0.028, current: 0.056, delta: 0.028, relDelta: 1, verdict: 'stable' },
       { metric: 'newPathShare', label: 'Runs on a new tool path', baseline: 0, current: 0.5, delta: 0.5, relDelta: null, verdict: 'regression' },
     ],
@@ -35,5 +36,6 @@ test('rapport : verdict, tableau, scénarios et liens', () => {
   assert.match(markdown, /- `refund-rounding` — \*\*Fails more often\*\* \(0\/3 → 2\/3 failed\), Mean cost \+83%, tool path changed · \[diff\]\(https:\/\/trajekt\.example\.com\/runs\/run-b\/compare\?with=run-a\)/);
   assert.match(markdown, /Only in A \(not compared\): `old-case`/);
   assert.equal(page, 'https://trajekt.example.com/agents/sentry-triage/evals?dim=prompt&a=v7&b=v8');
+  assert.match(markdown, /\| Score · correct \| 1\.00 \| 0\.89 \| −0\.11 \| stable \|/);
   assert.equal(pct(-0.25), '−25%');
 });

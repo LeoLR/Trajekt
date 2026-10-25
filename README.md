@@ -33,7 +33,9 @@ Logs tell you what an agent *said*. Trajekt shows you what it *did*.
 - **See where it went wrong** — repeated tool calls (same tool, same arguments), retries after a failure and failed steps are flagged on the timeline.
 - **Know what each step cost** — tokens, latency and cost per step and per run. Cost comes from the trace when the source provides it, and is otherwise estimated from tokens (and labelled as such).
 - **Compare versions** — every run carries an app version, an agent version, a prompt version and a model. Compare any two values of any of them: prompt `v7` against `v8`, app `3.1.0` against `3.2.0`, your current model against a cheaper one.
-- **Catch regressions** — Trajekt compares each new agent, prompt or app version with the previous one (and the last 24 h with the 7 days before) on failure rate, cost, duration, steps, tokens, loops and tool paths, and can post new regressions to Slack.
+- **Track quality, not only cost** — attach scores to runs (correct or not, an LLM judge, a thumbs up), in the trace or after the fact. A version that is cheaper but wrong shows up as a regression.
+- **Catch regressions** — Trajekt compares each new agent, prompt or app version with the previous one (and the last 24 h with the 7 days before) on quality scores, failure rate, cost, duration, steps, tokens, loops and tool paths — with statistical tests corrected for the number of metrics — and can post new regressions to Slack.
+- **Plug in what you already have** — OTLP over HTTP (JSON or protobuf), the GenAI conventions, Vercel AI SDK, OpenInference (LangChain, LlamaIndex, CrewAI), OpenLLMetry, and a Langfuse importer.
 
 ## Quickstart
 
@@ -150,7 +152,7 @@ Replay a fixed set of scenarios — mocked tools and data — on every change, a
   });
   ```
 
-- **Compare eval suites.** Tag eval runs with `trajekt.scenario` (and the version under test). Trajekt keeps them out of production metrics and compares each scenario with itself across two versions — a paired test that catches a regression with a dozen scenarios — then says `pass` or `fail`, which scenarios got worse, and links to a step-by-step diff. - **Gate your pull requests.** The [GitHub Action](actions/eval-suite) compares the PR head with its base, comments the result on the pull request — which scenarios got worse, with a link to their diff — and fails the job on a regression:
+- **Compare eval suites.** Tag eval runs with `trajekt.scenario`, and give them a quality score (`trajekt.score.correct`, or `scoreTrajectory()` from your assertions) (and the version under test). Trajekt keeps them out of production metrics and compares each scenario with itself across two versions — a paired test that catches a regression with a dozen scenarios — then says `pass` or `fail`, which scenarios got worse, and links to a step-by-step diff. - **Gate your pull requests.** The [GitHub Action](actions/eval-suite) compares the PR head with its base, comments the result on the pull request — which scenarios got worse, with a link to their diff — and fails the job on a regression:
 
   ```yaml
   - uses: LeoLR/Trajekt/actions/eval-suite@main
@@ -166,14 +168,20 @@ Replay a fixed set of scenarios — mocked tools and data — on every change, a
 
 See [Testing your agent](https://trajekt-eight.vercel.app/docs/#testing) in the docs, and the eval suite of the [live demo](https://trajekt-demo.vercel.app/agents/sentry-triage/evals).
 
+## Run it for a team
+
+Several projects per instance, each with its own API keys (`/projects`). Retention (`TRAJEKT_RETENTION_DAYS`), ingestion rate and size limits, and an option to drop raw payloads are in the [configuration](https://trajekt-eight.vercel.app/docs/#configuration).
+
 ## Works with
 
 | Source | How |
 |---|---|
-| OpenTelemetry | Any OTLP/HTTP exporter in **JSON** (`OTEL_EXPORTER_OTLP_PROTOCOL=http/json`), gzip accepted. Protobuf and gRPC are not supported yet. |
+| OpenTelemetry | Any OTLP/HTTP exporter, **JSON or protobuf**, gzip accepted. gRPC is not supported. |
 | OpenTelemetry GenAI semantic conventions | `gen_ai.operation.name`, `gen_ai.request.model`, `gen_ai.usage.*`, `gen_ai.tool.*`, `gen_ai.agent.name`, `gen_ai.input/output.messages` |
 | Vercel AI SDK | `experimental_telemetry` spans through an OTel exporter, or a `generateText` result posted to `/v1/traces` |
-| Langfuse | Trace exports (a trace with its `observations`) posted to `/v1/traces`. No live sync with a Langfuse instance. |
+| OpenInference / OpenLLMetry | LangChain, LlamaIndex, CrewAI… through their OTLP exporter: models, tokens, tools and their arguments |
+| Langfuse | `pnpm import-langfuse --since 7d` pulls traces and scores from a Langfuse project (re-runnable, no duplicates), or post a trace export to `/v1/traces` |
+| Hand-written agents | `traceRun` / `traceTool` from `@trajekt/core` with any OpenTelemetry tracer |
 
 ## Repository layout
 

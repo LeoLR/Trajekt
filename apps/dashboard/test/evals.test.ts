@@ -167,3 +167,34 @@ test('exploitation : rétention, limite de débit, payloads bruts optionnels, pl
   assert.deepEqual(blocked, { ok: false, retryAfterSeconds: 30 });
   assert.ok(takeToken('p', 3, t0 + 60_000).ok);
 });
+
+test('import Langfuse : pagination, détail des traces, scores, idempotent', async () => {
+  const { importFromLangfuse, parseSince } = await import('../src/server/langfuse-import');
+  const { supportBotRun, rng } = await import('../src/server/simulate');
+  const r = rng(99);
+  const traces = Array.from({ length: 3 }, (_, i) => ({ ...(supportBotRun(r, NOW.getTime() - (i + 1) * 3600_000) as any), name: 'lf-agent', id: `lf-import-${i}` }));
+  const calls: string[] = [];
+  const fakeFetch = (async (url: string, init: any) => {
+    calls.push(url);
+    assert.equal(init.headers.Authorization, `Basic ${Buffer.from('pk:sk').toString('base64')}`);
+    const u = new URL(url);
+    if (u.pathname === '/api/public/traces') {
+      const page = Number(u.searchParams.get('page'));
+      const data = page === 1 ? traces.slice(0, 2) : page === 2 ? traces.slice(2) : [];
+      return new Response(JSON.stringify({ data: data.map((t) => ({ id: t.id })), meta: { page, totalPages: 2 } }));
+    }
+    const id = decodeURIComponent(u.pathname.split('/').pop()!);
+    const t = traces.find((x) => x.id === id);
+    return t ? new Response(JSON.stringify(t)) : new Response('{}', { status: 404 });
+  }) as unknown as typeof fetch;
+  const opts = { host: 'https://lf.example.com/', publicKey: 'pk', secretKey: 'sk', from: parseSince('7d', NOW), fetch: fakeFetch };
+  const res = await importFromLangfuse(db, projectId, opts);
+  assert.deepEqual(res, { listed: 3, imported: 3, failed: [] });
+  assert.equal(calls.filter((c) => c.includes('/traces?')).length, 2, 'deux pages');
+  const again = await importFromLangfuse(db, projectId, opts);
+  assert.equal(again.imported, 3);
+  const rows = await db.query<{ n: number; scored: number }>(`select count(*)::int as n, count(s.name)::int as scored from trajectories t left join run_scores s on s.trajectory_id = t.id and s.name = 'helpful' where t.agent_name = 'lf-agent'`);
+  assert.deepEqual(rows[0], { n: 3, scored: 3 }, 'pas de doublon, scores importés');
+  assert.throws(() => parseSince('yesterday'), /Invalid --since/);
+  assert.equal(parseSince('24h', NOW).toISOString(), '2026-10-23T12:00:00.000Z');
+});
