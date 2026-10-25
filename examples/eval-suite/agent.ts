@@ -44,7 +44,11 @@ export function runAgent(scenario: Scenario, version: AgentVersion, repeat: numb
       push({ type: 'tool_call', name: 'gitlab.searchCode', args: { query: scenario.issue.title }, result: scenario.searchHits }, 800);
     }
   }
-  push({ type: 'tool_call', name: 'gitlab.readFile', args: { path: scenario.issue.file }, result: '…' }, 300);
+  // v2 lit parfois le mauvais fichier quand la recherche est ambiguë (le premier
+  // résultat n'est pas le bon) : le ticket part sur une fausse piste.
+  const readsWrongFile = version === 'v2' && scenario.searchHits.length > 1 && scenario.searchHits[0] !== scenario.issue.file && repeat < 2;
+  const file = readsWrongFile ? scenario.searchHits[0] : scenario.issue.file;
+  push({ type: 'tool_call', name: 'gitlab.readFile', args: { path: file }, result: '…' }, 300);
   llm(4200 + r() * 800, 500);
   push({ type: 'tool_call', name: 'jira.createIssue', args: { project: scenario.issue.id.split('-')[0], summary: scenario.issue.title }, result: { key: 'X-1' } }, 600);
 
@@ -53,6 +57,10 @@ export function runAgent(scenario: Scenario, version: AgentVersion, repeat: numb
     id: `${scenario.name}-${version}-${repeat}`,
     source: 'simulation',
     steps,
-    metadata: { agentName: 'sentry-triage', agentVersion: version, scenario: { name: scenario.name } },
+    metadata: {
+      agentName: 'sentry-triage', agentVersion: version, scenario: { name: scenario.name },
+      // Le score de qualité : le ticket pointe-t-il le bon fichier ?
+      scores: { correct: file === scenario.issue.file ? 1 : 0 },
+    },
   };
 }

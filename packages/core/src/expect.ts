@@ -140,6 +140,41 @@ export function checkTrajectory(t: Trajectory, e: TrajectoryExpectations): Expec
   return out;
 }
 
+/** Nombre de vérifications que représentent ces attentes (une par outil, par argument attendu, par budget…). */
+export function countExpectations(e: TrajectoryExpectations): number {
+  const budgets: Array<keyof TrajectoryExpectations> = [
+    'maxSteps', 'maxToolCalls', 'maxFailedToolCalls', 'maxRepeatedToolCalls', 'maxRetries', 'maxCostUsd', 'maxDurationMs', 'maxTokens',
+  ];
+  return (e.status ? 1 : 0)
+    + (e.calls?.length ?? 0)
+    + (e.notCalls?.length ?? 0)
+    + (e.order?.length ? 1 : 0)
+    + (e.calledWith?.length ?? 0)
+    + Object.keys(e.maxCallsPerTool ?? {}).length
+    + budgets.filter((k) => e[k] !== undefined).length;
+}
+
+export interface ExpectationScore {
+  /** Part des vérifications respectées, de 0 à 1. */
+  score: number;
+  passed: number;
+  total: number;
+  failures: ExpectationFailure[];
+}
+
+/**
+ * Comme checkTrajectory, mais renvoie un score : la part des attentes
+ * respectées. À envoyer à Trajekt comme score du run (POST /v1/scores,
+ * ou l'attribut trajekt.score.assertions) pour le suivre dans le temps
+ * et dans les comparaisons de versions.
+ */
+export function scoreTrajectory(t: Trajectory, e: TrajectoryExpectations): ExpectationScore {
+  const failures = checkTrajectory(t, e);
+  const total = countExpectations(e);
+  const passed = Math.max(0, total - failures.length);
+  return { score: total ? passed / total : 1, passed, total, failures };
+}
+
 /** Comme checkTrajectory, mais lève une erreur lisible au premier écart. */
 export function assertTrajectory(t: Trajectory, e: TrajectoryExpectations): RunMetrics {
   const failures = checkTrajectory(t, e);

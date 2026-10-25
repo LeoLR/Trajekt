@@ -52,10 +52,14 @@ export {
 
 export { mergeTrajectories, sortAndReindex } from './merge.js';
 
+export { decodeOtlpProtobuf } from './otlp-proto.js';
+
 export {
   computeMetrics,
   annotateSteps,
   stableStringify,
+  isMutatingTool,
+  setMutatingTools,
   type StepAnnotation,
   NO_TOOL_PATH,
   type RunMetrics,
@@ -73,6 +77,11 @@ export {
 export {
   compareWindows,
   regressionsOnly,
+  holmAdjust,
+  metricLabel,
+  isScoreKey,
+  type ScoreKey,
+  type AnyMetricKey,
   normalCdf,
   proportionIncreasePValue,
   meanIncreasePValue,
@@ -108,8 +117,21 @@ export {
 export {
   checkTrajectory,
   assertTrajectory,
+  scoreTrajectory,
+  countExpectations,
+  type ExpectationScore,
   matchesPartially,
   TrajectoryAssertionError,
   type TrajectoryExpectations,
   type ExpectationFailure,
 } from './expect.js';
+
+export {
+  traceRun,
+  traceTool,
+  runAttributes,
+  type RunLabels,
+  type RunHandle,
+  type SpanLike,
+  type TracerLike,
+} from './instrument.js';

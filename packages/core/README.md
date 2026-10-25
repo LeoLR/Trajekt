@@ -2,15 +2,42 @@
 
 The engine behind Trajekt: read any agent trace into one model, then measure it.
 
-- **`normalize(trace)` / `normalizeAll(payload)`** — Langfuse trace export, OTLP/JSON spans (GenAI semantic conventions, Vercel AI SDK telemetry), Vercel AI SDK `generateText` result, or a Trajekt trajectory → a `Trajectory`. Format detection is structural, no configuration. `normalizeAll` returns one trajectory per `traceId` (OTel exporters batch several traces in one request).
-- **`mergeTrajectories(a, b)`** — OTel exporters send a trace in several batches; merging is idempotent (steps are keyed by span id).
-- **`computeMetrics(trajectory)`** — status, start, duration, steps, LLM and tool calls, errors, tokens, cost (from the source, or estimated from tokens and flagged `costEstimated`), repeated tool calls, retries, tool path signature.
-- **`annotateSteps(trajectory)`** — the same rules step by step: error, retry attempt, "repeats step #n".
-- **`compareWindows(baseline, current)`** — is a group of runs worse than another one? One-sided z-test (rates) or Welch test (means), plus a minimum effect size and a minimum sample size, so noise is not reported as a regression.
+**Read traces**
+
+- **`normalize(trace)` / `normalizeAll(payload)`** — OTLP spans (GenAI semantic conventions, Vercel AI SDK telemetry, OpenInference from LangChain / LlamaIndex / CrewAI, OpenLLMetry), Langfuse trace exports, Vercel AI SDK `generateText` results or Trajekt trajectories → a `Trajectory`. Format detection is structural, no configuration. `normalizeAll` returns one trajectory per `traceId`.
+- **`decodeOtlpProtobuf(bytes)`** — an OTLP protobuf `ExportTraceServiceRequest` (what several OpenTelemetry SDKs send by default) → its OTLP/JSON form. No dependency, works in the browser.
+- **`mergeTrajectories(a, b)`** — OTel exporters send a trace in several batches; merging is idempotent (steps keyed by span id, scores merged by name).
+
+**Measure a run**
+
+- **`computeMetrics(run)`** — status, duration, steps, LLM and tool calls, errors, tokens, cost (from the source, or estimated from tokens), repeated tool calls, retries, tool path.
+- **`annotateSteps(run)`** — the same rules step by step: error, retry attempt, "repeats step #n". A repeat is the same tool with the same arguments as an earlier successful call, with no state-changing call in between (reading a file again after editing it is not a loop). `setMutatingTools()` tunes what counts as state-changing.
 - **`diffTrajectories(a, b)`** — two runs aligned step by step, with `=`, `≠`, `+`, `−` markers.
+
+**Test an agent**
+
+- **`assertTrajectory(run, expectations)`** — tools called, order, arguments, budgets (steps, cost, repeats…); throws an error listing everything that failed. `checkTrajectory` returns the list, `scoreTrajectory` the share of expectations met (a quality score to send to Trajekt).
+- **`compareScenarios(baseline, current)`** — two runs of an eval suite compared scenario by scenario: paired test across the suite (Holm-corrected), plain thresholds per scenario, quality scores first; `result: 'pass' | 'fail'` with the reasons. `scenarioRunOf(run)` prepares its input.
+- **`compareWindows(baseline, current)`** — is a group of runs worse than another one? One-sided tests per metric and per quality score, a minimum effect size and sample size, Holm correction across metrics.
+
+**Instrument an agent**
+
+- **`traceRun(tracer, labels, fn)` / `traceTool(tracer, name, args, fn)`** — the spans and attributes Trajekt reads (agent, versions, scenario, scores, tool arguments and results), with any OpenTelemetry tracer. No dependency.
 
 ```bash
 npm i @trajekt/core
+```
+
+```ts
+import { trace } from '@opentelemetry/api';
+import { traceRun, traceTool } from '@trajekt/core';
+
+const tracer = trace.getTracer('sentry-triage');
+await traceRun(tracer, { agent: 'sentry-triage', agentVersion: '1.5.0', promptVersion: 'v8' }, async (run) => {
+  const issue = await traceTool(tracer, 'sentry.getIssue', { id }, () => sentry.getIssue(id));
+  // …
+  run.score('correct', ticket.project === expectedProject);
+});
 ```
 
 ```ts

@@ -16,7 +16,10 @@ for (const scenario of SCENARIOS) {
   test(`${scenario.name} (${version})`, () => {
     assertTrajectory(runAgent(scenario, version, 0), {
       order: ['sentry.getIssue', 'gitlab.readFile', 'jira.createIssue'],
-      calledWith: [{ tool: 'jira.createIssue', args: { project: scenario.expectedProject } }],
+      calledWith: [
+        { tool: 'gitlab.readFile', args: { path: scenario.issue.file } },
+        { tool: 'jira.createIssue', args: { project: scenario.expectedProject } },
+      ],
       notCalls: ['gitlab.createMergeRequest'],
       maxRepeatedToolCalls: 0,
       maxSteps: 10,

@@ -211,6 +211,7 @@ const langfuseNormalizer: Normalizer = {
         promptVersion: str(meta.promptVersion) ?? promptVersion,
         environment: trace.environment ?? undefined,
         scenario: scenarioOf(str(meta.scenario)),
+        scores: langfuseScores(trace.scores),
       },
       createdAt: trace.timestamp,
     };
@@ -259,16 +260,24 @@ function otlpFromEntries(entries: OtlpEntry[]): Trajectory {
     };
     const error = spanError(span);
     const op = str(attrs['gen_ai.operation.name']);
+    // OpenInference (Arize Phoenix : LangChain, LlamaIndex, CrewAI…) et
+    // OpenLLMetry (Traceloop) déclarent le rôle du span explicitement.
+    const oiKind = str(attrs['openinference.span.kind'])?.toUpperCase();
+    const tlKind = str(attrs['traceloop.span.kind'])?.toLowerCase();
 
     const isLlm =
       (op !== undefined && LLM_OPERATIONS.has(op)) ||
       attrs['gen_ai.request.model'] !== undefined ||
+      oiKind === 'LLM' ||
+      attrs['llm.model_name'] !== undefined ||
       // Vercel AI SDK : seuls les spans *.doGenerate / *.doStream sont
       // de vrais appels au fournisseur ; le span parent les englobe.
       (attrs['ai.model.id'] !== undefined && /\.do(Generate|Stream)$/.test(span.name ?? ''));
     const toolName = str(
       attrs['gen_ai.tool.name'] ?? attrs['ai.toolCall.name'] ??
-        (op === 'execute_tool' ? span.name : undefined),
+        (op === 'execute_tool' ? span.name : undefined) ??
+        (oiKind === 'TOOL' ? attrs['tool.name'] ?? span.name : undefined) ??
+        (tlKind === 'tool' ? attrs['traceloop.entity.name'] ?? span.name : undefined),
     );
 
     if (toolName !== undefined) {
@@ -276,33 +285,45 @@ function otlpFromEntries(entries: OtlpEntry[]): Trajectory {
         ...base,
         type: 'tool_call' as const,
         name: toolName,
-        args: maybeJson(attrs['gen_ai.tool.call.arguments'] ?? attrs['ai.toolCall.args']),
-        result: maybeJson(attrs['gen_ai.tool.call.result'] ?? attrs['ai.toolCall.result']),
+        args: maybeJson(
+          attrs['gen_ai.tool.call.arguments'] ?? attrs['ai.toolCall.args'] ??
+            attrs['input.value'] ?? attrs['traceloop.entity.input'],
+        ),
+        result: maybeJson(
+          attrs['gen_ai.tool.call.result'] ?? attrs['ai.toolCall.result'] ??
+            attrs['output.value'] ?? attrs['traceloop.entity.output'],
+        ),
         error,
       };
     }
     if (isLlm) {
       const inputTokens = num(
         attrs['gen_ai.usage.input_tokens'] ?? attrs['gen_ai.usage.prompt_tokens'] ??
-          attrs['ai.usage.promptTokens'] ?? attrs['ai.usage.inputTokens'],
+          attrs['ai.usage.promptTokens'] ?? attrs['ai.usage.inputTokens'] ??
+          attrs['llm.token_count.prompt'],
       );
       const outputTokens = num(
         attrs['gen_ai.usage.output_tokens'] ?? attrs['gen_ai.usage.completion_tokens'] ??
-          attrs['ai.usage.completionTokens'] ?? attrs['ai.usage.outputTokens'],
+          attrs['ai.usage.completionTokens'] ?? attrs['ai.usage.outputTokens'] ??
+          attrs['llm.token_count.completion'],
       );
       // Messages : conventions GenAI récentes (gen_ai.input/output.messages)
       // et Vercel AI SDK (ai.prompt.messages, ai.response.text). Présents
       // seulement si l'instrumentation capture le contenu.
       const input = toMessages(
-        maybeJson(attrs['gen_ai.input.messages'] ?? attrs['ai.prompt.messages'] ?? attrs['ai.prompt']),
+        maybeJson(attrs['gen_ai.input.messages'] ?? attrs['ai.prompt.messages'] ?? attrs['ai.prompt']) ??
+          flattenedMessages(attrs, 'llm.input_messages'),
       ).map(({ role, content }) => ({ role, content: content.slice(0, 8000) }));
-      const outMessages = toMessages(maybeJson(attrs['gen_ai.output.messages']));
+      const outMessages = toMessages(
+        maybeJson(attrs['gen_ai.output.messages']) ?? flattenedMessages(attrs, 'llm.output_messages'),
+      );
       const text = str(attrs['ai.response.text']) ?? outMessages[0]?.content;
       return {
         ...base,
         type: 'llm_call' as const,
         model: str(
-          attrs['gen_ai.response.model'] ?? attrs['gen_ai.request.model'] ?? attrs['ai.model.id'],
+          attrs['gen_ai.response.model'] ?? attrs['gen_ai.request.model'] ?? attrs['ai.model.id'] ??
+            attrs['llm.model_name'],
         ),
         input,
         output: text ? { role: 'assistant' as const, content: text.slice(0, 8000) } : undefined,
@@ -310,7 +331,7 @@ function otlpFromEntries(entries: OtlpEntry[]): Trajectory {
           inputTokens !== undefined || outputTokens !== undefined
             ? { inputTokens, outputTokens }
             : undefined,
-        costUsd: num(attrs['gen_ai.usage.cost'] ?? attrs['trajekt.cost_usd']),
+        costUsd: num(attrs['gen_ai.usage.cost'] ?? attrs['trajekt.cost_usd'] ?? attrs['llm.cost.total']),
         error,
       };
     }
@@ -332,6 +353,15 @@ function otlpFromEntries(entries: OtlpEntry[]): Trajectory {
     }
     return undefined;
   };
+  // Scores : trajekt.score.<nom> sur n'importe quel span (la racine prime), ou la ressource.
+  const scores: Record<string, number> = {};
+  for (const a of [...resourceAttrs, ...[...ordered].reverse()]) {
+    for (const [k, v] of Object.entries(a)) {
+      if (!k.startsWith('trajekt.score.')) continue;
+      const n = typeof v === 'number' ? v : typeof v === 'boolean' ? Number(v) : Number(v);
+      if (Number.isFinite(n)) scores[k.slice('trajekt.score.'.length)] = n;
+    }
+  }
   let serviceName = pick([], ['service.name']);
   if (serviceName?.startsWith('unknown_service')) serviceName = undefined;
 
@@ -344,7 +374,8 @@ function otlpFromEntries(entries: OtlpEntry[]): Trajectory {
     metadata: {
       traceId,
       agentName:
-        pick(['trajekt.agent.name', 'gen_ai.agent.name', 'ai.telemetry.functionId']) ?? serviceName,
+        pick(['trajekt.agent.name', 'gen_ai.agent.name', 'ai.telemetry.functionId', 'traceloop.workflow.name']) ??
+        openInferenceAgent(sorted.map((e) => e.span), spanAttrs) ?? serviceName,
       // service.version décrit le service déployé : c'est la version de
       // l'appli. La version d'agent n'est renseignée que si elle est
       // explicite — le repli sur la version d'appli se fait au stockage,
@@ -368,8 +399,46 @@ function otlpFromEntries(entries: OtlpEntry[]): Trajectory {
       scenario: scenarioOf(
         pick(['trajekt.scenario', 'ai.telemetry.metadata.scenario'], ['trajekt.scenario']),
       ),
+      scores: Object.keys(scores).length ? scores : undefined,
     },
   };
+}
+
+/**
+ * OpenInference aplatit les messages : llm.input_messages.0.message.role,
+ * llm.input_messages.0.message.content… On les reconstitue.
+ */
+function flattenedMessages(attrs: Record<string, unknown>, prefix: string): unknown[] | undefined {
+  const out: Array<{ role?: unknown; content?: unknown }> = [];
+  const re = new RegExp(`^${prefix.replace(/\./g, '\\.')}\\.(\\d+)\\.message\\.(role|content)$`);
+  for (const [k, v] of Object.entries(attrs)) {
+    const m = re.exec(k);
+    if (!m) continue;
+    (out[Number(m[1])] ??= {})[m[2] as 'role' | 'content'] = v;
+  }
+  const list = out.filter(Boolean);
+  return list.length ? list : undefined;
+}
+
+/** Le nom de l'agent pour OpenInference : le span AGENT (ou la chaîne racine). */
+function openInferenceAgent(spans: any[], attrs: Array<Record<string, unknown>>): string | undefined {
+  const agent = attrs.findIndex((a) => str(a['openinference.span.kind'])?.toUpperCase() === 'AGENT');
+  if (agent >= 0) return str(spans[agent].name);
+  const root = spans.findIndex((sp) => !sp.parentSpanId);
+  if (root >= 0 && str(attrs[root]['openinference.span.kind'])?.toUpperCase() === 'CHAIN') return str(spans[root].name);
+  return undefined;
+}
+
+/** Scores d'une trace Langfuse : les valeurs numériques (et booléennes), par nom. */
+function langfuseScores(raw: unknown): Record<string, number> | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: Record<string, number> = {};
+  for (const sc of raw) {
+    if (!isObj(sc) || typeof sc.name !== 'string') continue;
+    const v = typeof sc.value === 'boolean' ? Number(sc.value) : Number(sc.value);
+    if (sc.value !== null && sc.value !== undefined && Number.isFinite(v)) out[sc.name] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 /** Un run rattaché à un scénario est un run d'évaluation (suite de tests). */

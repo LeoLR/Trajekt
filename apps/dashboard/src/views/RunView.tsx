@@ -1,7 +1,7 @@
 import type { RunPageData } from '../server/pages';
 import { Kpi, RunStatus, Shell } from '../components/ui';
 import { RunTimeline } from '../components/RunTimeline';
-import { formatCost, formatDuration, shortId } from '../lib/format';
+import { formatCost, formatScore, formatDuration, shortId } from '../lib/format';
 
 export function RunView({ data }: { data: RunPageData }) {
   const s = data.summary;
@@ -49,6 +49,9 @@ export function RunView({ data }: { data: RunPageData }) {
         <Kpi label="Steps" value={s.stepCount} sub={`${s.toolCallCount} tool calls`} />
         <Kpi label="Repeated tool calls" value={s.redundantToolCalls} />
         <Kpi label="Retries" value={s.retryCount} />
+        {Object.entries(s.scores).map(([name, v]) => (
+          <Kpi key={name} label={`Score · ${name}`} value={<span style={{ color: v < 0.5 ? 'var(--err-text)' : undefined }}>{formatScore(v)}</span>} />
+        ))}
       </div>
 
       {summary.length > 0 && (

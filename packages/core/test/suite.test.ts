@@ -207,3 +207,52 @@ test('le scénario est lu depuis les traces OTLP (span ou ressource) et Langfuse
   const none = normalize(otlpPayload([otlpSpan('t3', { spanId: 'r', name: 'x', startMs: 0, endMs: 1 })]));
   assert.throws(() => scenarioRunOf(none), /no scenario/);
 });
+
+/* ---------------- Scores ---------------- */
+
+test('scores : lus dans OTLP (trajekt.score.*) et Langfuse, cumulés à la fusion', async () => {
+  const { mergeTrajectories } = await import('../src/index.js');
+  const a = normalize(otlpPayload([
+    otlpSpan('s1', { spanId: 'r', name: 'invoke_agent', startMs: 0, endMs: 10, attrs: { 'trajekt.score.correct': { doubleValue: 1 }, 'trajekt.score.helpful': { stringValue: '0.5' } } }),
+  ]));
+  assert.deepEqual(a.metadata.scores, { correct: 1, helpful: 0.5 });
+  const b = normalize(otlpPayload([otlpSpan('s1', { spanId: 'c', parentSpanId: 'r', name: 'x', startMs: 1, endMs: 2, attrs: { 'trajekt.score.judge': { intValue: '0' } } })]));
+  assert.deepEqual(mergeTrajectories(a, b).metadata.scores, { correct: 1, helpful: 0.5, judge: 0 });
+  const lf = normalize({ id: 'lf2', name: 'support-bot', scores: [{ name: 'helpful', value: 1 }, { name: 'label', value: 'good' }, { name: 'ok', value: true }], observations: [] });
+  assert.deepEqual(lf.metadata.scores, { helpful: 1, ok: 1 });
+});
+
+test('scores : une baisse de qualité fait échouer la suite, même si le coût baisse', () => {
+  const a = suite(10, 3, () => ({ scores: { correct: 1 } }));
+  // B est 20 % moins cher… mais se trompe sur 3 scénarios.
+  const b = suite(10, 3, (i, k) => ({ costUsd: 0.016 * (1 + i * 0.7), scores: { correct: i < 3 && k < 2 ? 0 : 1 } }));
+  const r = compareScenarios(a, b);
+  assert.equal(r.metrics[0].metric, 'score:correct', 'les scores viennent en premier');
+  assert.equal(r.metrics[0].label, 'Score · correct');
+  assert.equal(r.result, 'fail');
+  assert.ok(r.reasons.some((x) => x === 'case-00: Score · correct 1.00 → 0.33'), r.reasons.join(' | '));
+  const s0 = r.scenarios.find((s) => s.scenario === 'case-00')!;
+  assert.ok(s0.changes.some((c) => c.metric === 'score:correct' && c.direction === 'worse'));
+});
+
+test('scores en prod : compareWindows compare chaque score présent des deux côtés', async () => {
+  const { compareWindows } = await import('../src/index.js');
+  const mom = (n: number, mean: number, stddev: number) => ({ n, mean, stddev });
+  const base = { runs: 200, errorRuns: 4, toolCalls: 1000, toolErrors: 10, durationMs: mom(200, 10, 2), costUsd: mom(200, 0.04, 0.01), stepCount: mom(200, 9, 1), totalTokens: mom(200, 11000, 1500), redundantToolCalls: mom(200, 0, 0), paths: { a: 200 } };
+  const r = compareWindows(
+    { ...base, scores: { correct: mom(150, 0.95, 0.2), helpful: mom(100, 0.8, 0.4) } },
+    { ...base, scores: { correct: mom(150, 0.78, 0.4) } },
+  );
+  const sc = r.find((c) => c.metric === 'score:correct')!;
+  assert.equal(sc.verdict, 'regression');
+  assert.equal(sc.severity, 'critical');
+  assert.equal(r.find((c) => c.metric === 'score:helpful'), undefined, 'absent d’un côté : pas comparé');
+});
+
+test('scoreTrajectory : part des attentes respectées', async () => {
+  const { scoreTrajectory } = await import('../src/index.js');
+  const r = scoreTrajectory(good, { status: 'ok', calls: ['sentry.getIssue', 'slack.postMessage'], maxSteps: 2, maxCostUsd: 1 });
+  assert.equal(r.total, 5);
+  assert.equal(r.passed, 3);
+  assert.equal(r.score, 0.6);
+});

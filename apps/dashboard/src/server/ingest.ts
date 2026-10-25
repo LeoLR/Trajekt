@@ -163,6 +163,18 @@ async function persist(db: Db, projectId: string, incoming: Trajectory): Promise
           values,
         );
 
+    // Scores portés par la trace. Ceux envoyés par l'API (après coup) priment.
+    for (const [name, value] of Object.entries(meta.scores ?? {})) {
+      if (!Number.isFinite(value)) continue;
+      await tx.query(
+        `insert into run_scores (trajectory_id, project_id, name, value, source)
+         values ($1::uuid, $2::uuid, $3, $4, 'trace')
+         on conflict (trajectory_id, name) do update set value = excluded.value, created_at = now()
+           where run_scores.source = 'trace'`,
+        [row.id, projectId, name.slice(0, 100), value],
+      );
+    }
+
     return {
       id: row.id,
       traceId,

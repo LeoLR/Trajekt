@@ -59,6 +59,8 @@ export interface VersionStats {
   avgRedundantToolCalls: number;
   topPath: string | null;
   topPathShare: number | null;
+  /** Moyenne de chaque score sur les runs de cette valeur. */
+  scores: Record<string, number>;
 }
 
 export interface ComparisonResult {
@@ -94,6 +96,8 @@ export interface RunSummary {
   sourceFormat: string | null;
   /** Scénario d'évaluation, null pour un run de prod. */
   scenario: string | null;
+  /** Scores de qualité du run, par nom. */
+  scores: Record<string, number>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -300,6 +304,15 @@ export async function agentVersions(
       order by v.first_seen desc`,
     [projectId, agent],
   );
+  const scoreRows = await db.query<{ value: string | null; name: string; mean: number }>(
+    `select t.${c} as value, s.name, avg(s.value)::float8 as mean
+       from run_scores s join trajectories t on t.id = s.trajectory_id
+      where t.project_id = $1 and t.scenario is null and t.agent_name = $2
+      group by t.${c}, s.name`,
+    [projectId, agent],
+  );
+  const scoresOf = (v: string | null) =>
+    Object.fromEntries(scoreRows.filter((x) => x.value === v).map((x) => [x.name, Number(x.mean)]));
   return rows.map((r) => ({
     version: (r.value as string | null) ?? null,
     firstSeen: iso(r.first_seen as Date),
@@ -312,6 +325,7 @@ export async function agentVersions(
     avgRedundantToolCalls: Number(r.avg_redundant),
     topPath: (r.top_path as string | null) ?? null,
     topPathShare: r.top_path_runs != null ? Number(r.top_path_runs) / Number(r.runs) : null,
+    scores: scoresOf((r.value as string | null) ?? null),
   }));
 }
 
@@ -381,6 +395,13 @@ export async function windowStats(
       group by path_signature`,
     params,
   );
+  const scoreRows = await db.query<{ name: string; n: number; mean: number; sd: number }>(
+    `select s.name, count(*)::int as n, avg(s.value)::float8 as mean, coalesce(stddev_samp(s.value), 0)::float8 as sd
+       from run_scores s join trajectories t on t.id = s.trajectory_id
+      where t.project_id = $1 and t.scenario is null and t.agent_name = $2 ${filter.replace(/\b(started_at|app_version|agent_version|prompt_version|primary_model)\b/g, 't.$1')}
+      group by s.name`,
+    params,
+  );
   const mom = (a: string): Moments => ({
     n: Number(r[`${a}_n`]),
     mean: Number(r[`${a}_mean`]),
@@ -399,6 +420,7 @@ export async function windowStats(
     totalTokens: mom('k'),
     redundantToolCalls: mom('r'),
     paths: Object.fromEntries(paths.map((p) => [p.path_signature, Number(p.c)])),
+    scores: Object.fromEntries(scoreRows.map((r) => [r.name, { n: Number(r.n), mean: Number(r.mean), stddev: Number(r.sd) }])),
   };
 }
 
@@ -515,7 +537,8 @@ export interface ListRunsOptions {
 
 const SUMMARY_COLS = `id, trace_id, agent_name, app_version, agent_version, prompt_version, status, started_at, duration_ms,
   step_count, tool_call_count, tool_error_count, redundant_tool_calls, retry_count,
-  cost_usd::float8 as cost_usd, cost_estimated, primary_model, path_signature, source_format, scenario`;
+  cost_usd::float8 as cost_usd, cost_estimated, primary_model, path_signature, source_format, scenario,
+  (select jsonb_object_agg(rs.name, rs.value) from run_scores rs where rs.trajectory_id = trajectories.id)::text as scores_json`;
 
 function toSummary(r: Record<string, unknown>): RunSummary {
   return {
@@ -539,6 +562,7 @@ function toSummary(r: Record<string, unknown>): RunSummary {
     pathSignature: String(r.path_signature),
     sourceFormat: (r.source_format as string | null) ?? null,
     scenario: (r.scenario as string | null) ?? null,
+    scores: r.scores_json ? (JSON.parse(String(r.scores_json)) as Record<string, number>) : {},
   };
 }
 

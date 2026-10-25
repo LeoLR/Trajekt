@@ -44,6 +44,10 @@ export function mergeTrajectories(existing: Trajectory, incoming: Trajectory): T
   for (const [k, v] of Object.entries(incoming.metadata)) {
     if (v !== undefined && v !== null && v !== '') metadata[k] = v;
   }
+  // Les scores arrivent parfois par lots différents : on les cumule par nom.
+  if (existing.metadata.scores || incoming.metadata.scores) {
+    metadata.scores = { ...existing.metadata.scores, ...incoming.metadata.scores };
+  }
 
   const createdAt = [existing.createdAt, incoming.createdAt]
     .filter((d): d is string => Boolean(d))

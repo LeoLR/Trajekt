@@ -1,10 +1,10 @@
-import { METRIC_LABELS } from '@trajekt/core';
+import { metricLabel } from '@trajekt/core';
 import type { AgentPageData } from '../server/pages';
 import { DIMENSIONS, type Dimension } from '../server/queries';
 import { Kpi, RunStatus, Shell, VerdictChip } from '../components/ui';
 import { LineChart } from '../components/charts';
 import {
-  formatCost, formatDelta, formatDuration, formatMetric, formatNumber, formatPercent, formatRelativeTime, shortId,
+  formatCost, formatDelta, formatScore, formatDuration, formatMetric, formatNumber, formatPercent, formatRelativeTime, shortId,
 } from '../lib/format';
 
 /** Paramètre de /runs qui filtre sur une dimension. */
@@ -22,6 +22,7 @@ export function AgentView({ data }: { data: AgentPageData }) {
   const regressions = c?.comparisons.filter((x) => x.verdict === 'regression') ?? [];
   const dim = data.dimension;
   const values = data.dimensionValues[dim];
+  const scoreNames = [...new Set(data.versions.flatMap((v) => Object.keys(v.scores)))].sort();
   const sideLabel = (side: 'A' | 'B', v: string) => (c && c.mode !== 'window' ? `${side} · ${v}` : v);
 
   return (
@@ -120,7 +121,7 @@ export function AgentView({ data }: { data: AgentPageData }) {
                   {c.comparisons.map((x) => (
                     <tr key={x.metric} className={x.verdict === 'regression' ? 'is-regression' : undefined}>
                       <td>
-                        {METRIC_LABELS[x.metric]}
+                        {metricLabel(x.metric)}
                         {x.detail && x.verdict === 'regression' && <div className="faint mono" style={{ fontSize: 11.5, marginTop: 2 }}>{x.detail}</div>}
                       </td>
                       <td className="num">{formatMetric(x.metric, x.baseline)}</td>
@@ -133,7 +134,7 @@ export function AgentView({ data }: { data: AgentPageData }) {
               </table>
             </div>
             <div className="panel-pad faint" style={{ fontSize: 12, borderTop: '1px solid var(--border)' }}>
-              A metric is flagged only when the change is both statistically significant (one-sided test, p &lt; 0.01) and large enough to matter (+15% on a mean, +3 pts on a rate), with at least 20 runs on each side.
+              A metric is flagged only when the change is both statistically significant (one-sided test, p &lt; 0.01, Holm-corrected for the number of metrics) and large enough to matter (+15% on a mean, +3 pts on a rate, −0.05 on a score), with at least 20 runs on each side.
             </div>
           </div>
         ) : <div className="panel empty">No data to compare yet.</div>}
@@ -193,7 +194,7 @@ export function AgentView({ data }: { data: AgentPageData }) {
         <div className="panel table-wrap">
           <table>
             <thead>
-              <tr><th>{DIM_SHORT[dim]}</th><th>First run</th><th className="num">Runs</th><th className="num">Failed</th><th className="num">p50 duration</th><th className="num">Mean cost</th><th className="num">Steps</th><th className="num">Repeats</th></tr>
+              <tr><th>{DIM_SHORT[dim]}</th><th>First run</th><th className="num">Runs</th><th className="num">Failed</th><th className="num">p50 duration</th><th className="num">Mean cost</th><th className="num">Steps</th><th className="num">Repeats</th>{scoreNames.map((k) => <th key={k} className="num">Score · {k}</th>)}</tr>
             </thead>
             <tbody>
               {data.versions.map((v) => (
@@ -206,6 +207,7 @@ export function AgentView({ data }: { data: AgentPageData }) {
                   <td className="num">{formatCost(v.avgCostUsd)}</td>
                   <td className="num">{formatNumber(v.avgSteps, 1)}</td>
                   <td className="num">{formatNumber(v.avgRedundantToolCalls, 2)}</td>
+                  {scoreNames.map((k) => <td key={k} className="num">{formatScore(v.scores[k])}</td>)}
                 </tr>
               ))}
             </tbody>
@@ -265,6 +267,9 @@ export function RunsTable({ runs, now, showAgent = true }: { runs: AgentPageData
                   {r.redundantToolCalls > 0 && <span className="chip chip-amber">repeat ×{r.redundantToolCalls}</span>}
                   {r.retryCount > 0 && <span className="chip chip-amber">retry ×{r.retryCount}</span>}
                   {r.toolErrorCount > 0 && <span className="chip chip-err">{r.toolErrorCount} tool error{r.toolErrorCount > 1 ? 's' : ''}</span>}
+                  {Object.entries(r.scores ?? {}).filter(([, v]) => v < 1).map(([k, v]) => (
+                    <span key={k} className={v < 0.5 ? 'chip chip-err' : 'chip chip-amber'} title={`score ${k}`}>{k} {formatScore(v)}</span>
+                  ))}
                 </span>
               </td>
             </tr>

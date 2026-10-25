@@ -18,10 +18,13 @@
 import type { Trajectory } from './trajectory.js';
 import { computeMetrics } from './metrics.js';
 import {
-  METRIC_LABELS,
   normalCdf,
+  holmAdjust,
+  metricLabel,
+  type AnyMetricKey,
   type Comparison,
   type MetricKey,
+  type ScoreKey,
   type Severity,
   type Verdict,
 } from './regression.js';
@@ -38,6 +41,8 @@ export interface ScenarioRun {
   toolErrors: number;
   redundantToolCalls: number;
   pathSignature: string;
+  /** Scores de qualité du run (plus haut = mieux). */
+  scores?: Record<string, number>;
 }
 
 export interface ScenarioAggregate {
@@ -53,10 +58,12 @@ export interface ScenarioAggregate {
   /** Chemin d'outils le plus fréquent. */
   path: string;
   paths: Record<string, number>;
+  /** Moyenne de chaque score sur les runs qui l'ont. */
+  scores: Record<string, number>;
 }
 
 export interface ScenarioChange {
-  metric: MetricKey;
+  metric: AnyMetricKey;
   label: string;
   baseline: number | null;
   current: number | null;
@@ -89,7 +96,10 @@ export interface SuiteComparison {
 }
 
 export interface SuiteCompareOptions {
-  /** Scénarios appariés minimum pour un verdict de suite (défaut 5). */
+  /**
+   * Scénarios appariés minimum pour un verdict de suite (défaut 8 : en
+   * dessous, aucun écart ne reste significatif après correction de Holm).
+   */
   minScenarios?: number;
   /** Seuil unilatéral (défaut 0.05). */
   alpha?: number;
@@ -101,6 +111,12 @@ export interface SuiteCompareOptions {
   scenarioRelIncrease?: number;
   /** Hausse du taux d'échec qui signale un scénario (défaut 0.5). */
   scenarioRateIncrease?: number;
+  /** Baisse moyenne minimale d'un score sur la suite (défaut 0.05, échelle 0–1). */
+  minScoreDrop?: number;
+  /** Baisse d'un score qui signale un scénario (défaut 0.25). */
+  scenarioScoreDrop?: number;
+  /** Baisse d'un score qui fait échouer la suite à elle seule (défaut 0.5, ex. 1 → 0.33). */
+  failScenarioScoreDrop?: number;
 }
 
 /** Métriques d'un run tirées d'une trajectoire, pour comparer en local ou en CI. */
@@ -118,6 +134,7 @@ export function scenarioRunOf(t: Trajectory, scenario = t.metadata.scenario?.nam
     toolErrors: m.toolErrorCount,
     redundantToolCalls: m.redundantToolCalls,
     pathSignature: m.pathSignature,
+    scores: t.metadata.scores,
   };
 }
 
@@ -187,6 +204,10 @@ function aggregate(runs: ScenarioRun[]): ScenarioAggregate {
   for (const r of runs) paths[r.pathSignature] = (paths[r.pathSignature] ?? 0) + 1;
   const path = Object.entries(paths).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? '';
   const failed = runs.filter((r) => r.status === 'error').length;
+  const byScore: Record<string, number[]> = {};
+  for (const r of runs) {
+    for (const [k, v] of Object.entries(r.scores ?? {})) if (Number.isFinite(v)) (byScore[k] ??= []).push(v);
+  }
   return {
     runs: runs.length,
     failed,
@@ -199,6 +220,7 @@ function aggregate(runs: ScenarioRun[]): ScenarioAggregate {
     redundantToolCalls: mean(runs.map((r) => r.redundantToolCalls)),
     path,
     paths,
+    scores: Object.fromEntries(Object.entries(byScore).map(([k, v]) => [k, mean(v)])),
   };
 }
 
@@ -221,9 +243,9 @@ const SCALE: Array<'durationMs' | 'costUsd' | 'stepCount' | 'totalTokens'> = [
   'durationMs', 'costUsd', 'stepCount', 'totalTokens',
 ];
 
-function insufficient(metric: MetricKey, n: number, min: number, baseline: number | null, current: number | null): Comparison {
+function insufficient(metric: AnyMetricKey, n: number, min: number, baseline: number | null, current: number | null): Comparison {
   return {
-    metric, label: METRIC_LABELS[metric], baseline, current, delta: null, relDelta: null,
+    metric, label: metricLabel(metric), baseline, current, delta: null, relDelta: null,
     pValue: null, verdict: 'insufficient',
     detail: `${n} paired scenario${n === 1 ? '' : 's'} — need at least ${min}`,
   };
@@ -251,7 +273,7 @@ function compareRateMetric(
   let severity: Severity | undefined;
   if (verdict === 'regression') severity = delta >= 0.1 ? 'critical' : 'warning';
   return {
-    metric, label: METRIC_LABELS[metric], baseline, current, delta,
+    metric, label: metricLabel(metric), baseline, current, delta,
     relDelta: baseline ? delta / baseline : null, pValue: p, verdict, severity,
   };
 }
@@ -273,7 +295,7 @@ function compareScaleMetric(
   let severity: Severity | undefined;
   if (verdict === 'regression') severity = ratio >= 0.5 ? 'critical' : 'warning';
   return {
-    metric, label: METRIC_LABELS[metric], baseline, current, delta: current! - baseline!,
+    metric, label: metricLabel(metric), baseline, current, delta: current! - baseline!,
     relDelta: ratio, pValue: p, verdict, severity,
     detail: 'Typical change per scenario (geometric mean of the ratios)',
   };
@@ -291,14 +313,14 @@ function compareRedundant(pairs: Pair[], o: Required<SuiteCompareOptions>): Comp
   const { pUp, pDown } = signedRankPValues(xs.map(([x, y]) => y - x));
   const { verdict, p } = verdictOf(pUp, pDown, up, down, o.alpha);
   return {
-    metric: 'redundantToolCalls', label: METRIC_LABELS.redundantToolCalls, baseline, current, delta,
+    metric: 'redundantToolCalls', label: metricLabel('redundantToolCalls'), baseline, current, delta,
     relDelta: r, pValue: p, verdict,
     severity: verdict === 'regression' ? (r === null || r >= 0.5 ? 'critical' : 'warning') : undefined,
   };
 }
 
 function comparePathShare(pairs: Pair[], o: Required<SuiteCompareOptions>): Comparison {
-  const label = METRIC_LABELS.newPathShare;
+  const label = metricLabel('newPathShare');
   if (pairs.length < o.minScenarios) return insufficient('newPathShare', pairs.length, o.minScenarios, null, null);
   const changed = pairs.filter(({ a, b }) => !(b.path in a.paths)).length;
   const share = changed / pairs.length;
@@ -309,6 +331,26 @@ function comparePathShare(pairs: Pair[], o: Required<SuiteCompareOptions>): Comp
     // Jamais bloquant : un nouveau chemin est à regarder, pas une faute en soi.
     severity: regression ? 'warning' : undefined,
     detail: `${changed} of ${pairs.length} scenarios now take a tool path never seen in the baseline`,
+  };
+}
+
+/** Un score : plus haut = mieux, différences brutes appariées. */
+function compareScoreMetric(name: string, pairs: Pair[], o: Required<SuiteCompareOptions>): Comparison {
+  const metric: ScoreKey = `score:${name}`;
+  const xs = pairs
+    .filter(({ a, b }) => name in a.scores && name in b.scores)
+    .map(({ a, b }) => [a.scores[name], b.scores[name]] as const);
+  const baseline = xs.length ? mean(xs.map((x) => x[0])) : null;
+  const current = xs.length ? mean(xs.map((x) => x[1])) : null;
+  if (xs.length < o.minScenarios) return insufficient(metric, xs.length, o.minScenarios, baseline, current);
+  const delta = current! - baseline!;
+  const { pUp, pDown } = signedRankPValues(xs.map(([x, y]) => y - x));
+  // Pour un score, la régression est une baisse.
+  const { verdict, p } = verdictOf(pDown, pUp, -delta >= o.minScoreDrop, delta >= o.minScoreDrop, o.alpha);
+  return {
+    metric, label: metricLabel(metric), baseline, current, delta,
+    relDelta: baseline ? delta / baseline : null, pValue: p, verdict,
+    severity: verdict === 'regression' ? (-delta >= 0.15 ? 'critical' : 'warning') : undefined,
   };
 }
 
@@ -329,17 +371,28 @@ function scenarioChanges(a: ScenarioAggregate, b: ScenarioAggregate, o: Required
     if (x === null || y === null || x <= 0 || y <= 0) continue;
     const r = y / x - 1;
     if (r >= o.scenarioRelIncrease || r <= -o.scenarioRelIncrease / (1 + o.scenarioRelIncrease)) {
-      out.push({ metric, label: METRIC_LABELS[metric], baseline: x, current: y, relDelta: r, direction: r > 0 ? 'worse' : 'better' });
+      out.push({ metric, label: metricLabel(metric), baseline: x, current: y, relDelta: r, direction: r > 0 ? 'worse' : 'better' });
     }
   }
   const dr = b.redundantToolCalls - a.redundantToolCalls;
   if (Math.abs(dr) >= 1) {
     out.push({
-      metric: 'redundantToolCalls', label: METRIC_LABELS.redundantToolCalls,
+      metric: 'redundantToolCalls', label: metricLabel('redundantToolCalls'),
       baseline: a.redundantToolCalls, current: b.redundantToolCalls,
       relDelta: a.redundantToolCalls > 0 ? dr / a.redundantToolCalls : null,
       direction: dr > 0 ? 'worse' : 'better',
     });
+  }
+  for (const name of Object.keys(a.scores)) {
+    if (!(name in b.scores)) continue;
+    const d = b.scores[name] - a.scores[name];
+    if (Math.abs(d) >= o.scenarioScoreDrop) {
+      out.push({
+        metric: `score:${name}`, label: metricLabel(`score:${name}`),
+        baseline: a.scores[name], current: b.scores[name], relDelta: null,
+        direction: d < 0 ? 'worse' : 'better',
+      });
+    }
   }
   if (!(b.path in a.paths)) {
     out.push({
@@ -360,12 +413,15 @@ export function compareScenarios(
   options: SuiteCompareOptions = {},
 ): SuiteComparison {
   const o: Required<SuiteCompareOptions> = {
-    minScenarios: options.minScenarios ?? 5,
+    minScenarios: options.minScenarios ?? 8,
     alpha: options.alpha ?? 0.05,
     minRelIncrease: options.minRelIncrease ?? 0.15,
     minRateIncrease: options.minRateIncrease ?? 0.05,
     scenarioRelIncrease: options.scenarioRelIncrease ?? 0.5,
     scenarioRateIncrease: options.scenarioRateIncrease ?? 0.5,
+    minScoreDrop: options.minScoreDrop ?? 0.05,
+    scenarioScoreDrop: options.scenarioScoreDrop ?? 0.25,
+    failScenarioScoreDrop: options.failScenarioScoreDrop ?? 0.5,
   };
   const A = groupByScenario(baseline);
   const B = groupByScenario(current);
@@ -381,9 +437,13 @@ export function compareScenarios(
     compareRedundant(pairs, o),
     comparePathShare(pairs, o),
   ];
+  const scoreNames = [...new Set(pairs.flatMap(({ a, b }) => Object.keys(a.scores).filter((k) => k in b.scores)))].sort();
   // Même ordre que compareWindows.
   const ORDER: MetricKey[] = ['errorRate', 'toolErrorRate', 'durationMs', 'costUsd', 'stepCount', 'totalTokens', 'redundantToolCalls', 'newPathShare'];
-  metrics.sort((x, y) => ORDER.indexOf(x.metric) - ORDER.indexOf(y.metric));
+  metrics.sort((x, y) => ORDER.indexOf(x.metric as MetricKey) - ORDER.indexOf(y.metric as MetricKey));
+  // Les scores en premier : c'est la qualité, avant le coût.
+  metrics.unshift(...scoreNames.map((k) => compareScoreMetric(k, pairs, o)));
+  const corrected = holmAdjust(metrics, o.alpha);
 
   const rank = { regression: 0, changed: 1, improvement: 2, stable: 3 } as const;
   const scenarios: ScenarioDiff[] = pairs
@@ -398,19 +458,24 @@ export function compareScenarios(
     .sort((x, y) => rank[x.verdict] - rank[y.verdict] || y.changes.length - x.changes.length || x.scenario.localeCompare(y.scenario));
 
   const reasons: string[] = [];
-  for (const m of metrics) {
+  for (const m of corrected) {
     // Un chemin d'outils nouveau est à regarder, pas une raison d'échouer.
     if (m.verdict === 'regression' && m.metric !== 'newPathShare') reasons.push(`${m.label} regressed across the suite`);
   }
   for (const s of scenarios) {
     const fail = s.changes.find((c) => c.metric === 'errorRate' && c.direction === 'worse');
     if (fail) reasons.push(`${s.scenario}: ${fail.detail}`);
+    for (const c of s.changes) {
+      if (c.direction === 'worse' && c.metric.startsWith('score:') && c.baseline! - c.current! >= o.failScenarioScoreDrop) {
+        reasons.push(`${s.scenario}: ${c.label} ${c.baseline!.toFixed(2)} → ${c.current!.toFixed(2)}`);
+      }
+    }
   }
   return {
     paired: pairs.length,
     onlyBaseline: [...A.keys()].filter((k) => !B.has(k)).sort(),
     onlyCurrent: [...B.keys()].filter((k) => !A.has(k)).sort(),
-    metrics,
+    metrics: corrected,
     scenarios,
     result: reasons.length ? 'fail' : 'pass',
     reasons,

@@ -1,28 +1,59 @@
 {
   "name": "@trajekt/core",
   "version": "0.1.0",
-  "description": "Modèle de trajectoire normalisé pour agents IA : normalisation universelle (Langfuse, OTLP, AI SDK), métriques par run, détection de régression.",
+  "description": "Normalize AI agent traces (OpenTelemetry/OTLP JSON and protobuf, OpenInference, Langfuse, Vercel AI SDK), compute per-run metrics, detect regressions between versions, compare eval suites and assert on trajectories.",
+  "keywords": [
+    "ai-agents",
+    "llm",
+    "observability",
+    "opentelemetry",
+    "otlp",
+    "langfuse",
+    "evals",
+    "regression-testing",
+    "trajectory",
+    "tracing"
+  ],
+  "homepage": "https://trajekt-eight.vercel.app/docs/#library",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LeoLR/Trajekt.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/LeoLR/Trajekt/issues"
+  },
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "build": "tsc",
-    "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test test/*.test.ts"
-  },
-  "license": "MIT",
-  "devDependencies": {
-    "typescript": "^5.9.0",
-    "tsx": "^4.20.0",
-    "@types/node": "^22.0.0"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "tsx": "^4.20.0",
+    "@types/node": "^22.0.0"
   }
 }

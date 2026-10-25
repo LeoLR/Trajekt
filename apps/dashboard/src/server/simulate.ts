@@ -136,6 +136,8 @@ export interface TriageOptions {
   loopChance?: number;
   /** Probabilité qu'une v1.5.0 tente une MR rejetée (défaut 0.14). */
   mrFailChance?: number;
+  /** Le run ouvre le ticket sur le mauvais fichier (score « correct » à 0). Sinon tiré au sort. */
+  wrongFile?: boolean;
 }
 
 export function sentryTriageRun(r: Rand, startMs: number, version: '1.4.0' | '1.5.0', o: TriageOptions = {}): unknown[] {
@@ -181,9 +183,14 @@ export function sentryTriageRun(r: Rand, startMs: number, version: '1.4.0' | '1.
 
   const children = b.spans;
   const env = o.scenario ? 'ci' : 'production';
+  // Qualité : le ticket pointe-t-il le bon fichier ? La v1.5.0, quand elle
+  // boucle sur une recherche ambiguë, finit parfois sur le mauvais.
+  const looped = children.filter((x) => x.name === 'execute_tool gitlab.searchCode').length > 1;
+  const wrong = o.wrongFile ?? (rootError ? true : r() < (regressed && looped ? 0.28 : 0.03));
   const rootAttrs: Record<string, string> = {
     'trajekt.agent.version': version,
     'trajekt.prompt.version': promptVersion,
+    'trajekt.score.correct': wrong ? '0' : '1',
     ...(o.scenario ? { 'trajekt.scenario': o.scenario.name } : {}),
   };
   const cut = Math.max(1, Math.floor(children.length * between(r, 0.4, 0.8)));
@@ -201,12 +208,15 @@ export function supportBotRun(r: Rand, startMs: number): unknown {
   const d2 = between(r, 150, 400);
   const d3 = between(r, 700, 1500);
   const failed = r() < 0.03;
+  const helpful = failed ? 0 : r() < 0.88 ? 1 : 0;
   return {
     id,
     name: 'support-bot',
     release: 'v2.1.0',
     environment: 'production',
     timestamp: t(0),
+    // Pouce levé ou baissé de l'utilisateur, remonté comme score Langfuse.
+    scores: [{ name: 'helpful', value: helpful, dataType: 'NUMERIC' }],
     observations: [
       { id: `${id}-1`, type: 'GENERATION', name: 'route', model: 'gpt-4o-mini', startTime: t(0), endTime: t(d1), usage: { input: Math.round(between(r, 700, 1100)), output: Math.round(between(r, 40, 90)) }, calculatedTotalCost: between(r, 0.0002, 0.0004), input: [{ role: 'user', content: 'Where is my order?' }], output: { role: 'assistant', content: 'Let me check.' } },
       { id: `${id}-2`, type: 'TOOL', name: 'orders.lookup', startTime: t(d1 + 20), endTime: t(d1 + 20 + d2), input: { orderId: Math.floor(between(r, 1000, 9999)) }, output: { status: 'shipped' }, level: failed ? 'ERROR' : 'DEFAULT', statusMessage: failed ? 'orders API timeout' : undefined },
@@ -249,9 +259,11 @@ export function simulateTraffic(now: number, opts: { days?: number; seed?: numbe
  * La suite d'évaluation de sentry-triage : 12 tickets Sentry mockés, joués
  * 3 fois chacun par version, comme le ferait une CI. La v1.5.0 boucle sur
  * les tickets dont le fichier est ambigu (recherche à plusieurs résultats)
- * et se met à échouer sur l'un d'eux : la suite le dit avant la mise en prod.
+ * et se met à échouer sur l'un d'eux ; sur un autre, elle ouvre le ticket
+ * sur le mauvais fichier (score « correct » de 1 à 0,33) : la suite le dit
+ * avant la mise en prod.
  */
-export const EVAL_SCENARIOS: Array<{ name: string; issue: string; file: string; ambiguous: boolean; breaks?: boolean }> = [
+export const EVAL_SCENARIOS: Array<{ name: string; issue: string; file: string; ambiguous: boolean; breaks?: boolean; misleads?: boolean }> = [
   { name: 'npe-checkout-discount', issue: 'PAY-1432', file: 'checkout/discount.ts', ambiguous: true },
   { name: 'payment-timeout', issue: 'PAY-1440', file: 'checkout/payment.ts', ambiguous: false },
   { name: 'refund-rounding', issue: 'PAY-1451', file: 'checkout/refund.ts', ambiguous: true, breaks: true },
@@ -263,7 +275,7 @@ export const EVAL_SCENARIOS: Array<{ name: string; issue: string; file: string; 
   { name: 'search-index-stale', issue: 'SRCH-412', file: 'search/indexer.ts', ambiguous: true },
   { name: 'search-typo-tolerance', issue: 'SRCH-420', file: 'search/query.ts', ambiguous: false },
   { name: 'invoice-pdf-blank', issue: 'BILL-77', file: 'billing/invoice.ts', ambiguous: false },
-  { name: 'tax-rate-eu', issue: 'BILL-81', file: 'billing/tax.ts', ambiguous: true },
+  { name: 'tax-rate-eu', issue: 'BILL-81', file: 'billing/tax.ts', ambiguous: true, misleads: true },
 ];
 
 export function simulateEvalSuite(
@@ -281,6 +293,8 @@ export function simulateEvalSuite(
         scenario: sc,
         loopChance: sc.ambiguous ? 0.95 : 0.05,
         mrFailChance: sc.breaks ? (k < 2 ? 1 : 0) : 0,
+        // La suite est déterministe : la v1.5.0 se trompe de fichier sur tax-rate-eu (2 runs sur 3).
+        wrongFile: version === '1.5.0' && Boolean((sc.misleads || sc.breaks) && k < 2),
       })) out.push({ at, payload });
     }
   });

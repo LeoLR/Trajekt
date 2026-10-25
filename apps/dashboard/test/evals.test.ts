@@ -104,3 +104,30 @@ test('scénario fourni par en-tête (X-Trajekt-Scenario) si la trace n’en a pa
   const [run] = await ingestPayload(db, projectId, payload, { scenario: 'from-header' });
   assert.equal(run.scenario, 'from-header');
 });
+
+test('scores : en prod, la baisse de qualité de la v1.5.0 ressort ; scores après coup par traceId', async () => {
+  const { compareLatestVersions, listRuns: lr, agentVersions: av } = await import('../src/server/queries');
+  const { addScores, parseScore } = await import('../src/server/scores');
+  const cmp = (await compareLatestVersions(db, projectId, 'sentry-triage'))!;
+  const correct = cmp.comparisons.find((c) => c.metric === 'score:correct')!;
+  assert.equal(correct.verdict, 'regression');
+  assert.ok(correct.baseline! > 0.9 && correct.current! < 0.85, `${correct.baseline} → ${correct.current}`);
+  assert.ok((await av(db, projectId, 'sentry-triage')).every((v) => typeof v.scores.correct === 'number'));
+  // support-bot : score « helpful » venu de l'export Langfuse.
+  const [bot] = (await lr(db, projectId, { agent: 'support-bot', limit: 1 })).items;
+  assert.ok('helpful' in bot.scores);
+
+  // Retour utilisateur après coup, par traceId : il prime sur la trace, même si elle est renvoyée.
+  const [run] = (await lr(db, projectId, { agent: 'sentry-triage', kind: 'live', limit: 1 })).items;
+  const input = parseScore({ traceId: run.traceId, name: 'correct', value: true, comment: 'checked by on-call' });
+  assert.equal(typeof input, 'object');
+  const [res] = await addScores(db, projectId, [input as any, { traceId: 'nope', name: 'x', value: 1 }].slice(0, 1));
+  assert.equal(res.ok, true);
+  const missing = await addScores(db, projectId, [{ traceId: 'nope', name: 'x', value: 1 }]);
+  assert.match(missing[0].error!, /No run found for traceId nope/);
+  const [{ value, source }] = await db.query<{ value: number; source: string }>(`select value, source from run_scores where trajectory_id = $1 and name = 'correct'`, [run.id]);
+  assert.equal(Number(value), 1);
+  assert.equal(source, 'api');
+  assert.equal(parseScore({ traceId: 't', name: 'bad name!', value: 1 }), '"name" must be 1–100 characters: letters, digits, _ . -');
+  assert.match(String(parseScore({ name: 'ok', value: 1 })), /traceId/);
+});

@@ -67,6 +67,76 @@ export function stableStringify(v: unknown): string {
     .join(',')}}`;
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Appels d'outil répétés                                               */
+/* ------------------------------------------------------------------ */
+
+const READ_PREFIX = /^(get|read|list|search|fetch|find|query|view|show|describe|lookup|load|cat|grep|glob|head|tail|check|count|inspect|retrieve|browse|open)/i;
+const MUTATING = /(write|edit|update|create|delete|remove|insert|replace|patch|put|post|set|save|apply|commit|push|merge|move|rename|upload|send|exec|run|bash|shell|command|terminal|install|deploy)/i;
+
+const defaultMutatingRule = (name: string) => {
+  const last = name.split(/[.:/]/).pop() ?? name;
+  if (READ_PREFIX.test(last)) return false;
+  return MUTATING.test(last);
+};
+let mutatingRule: (toolName: string) => boolean = defaultMutatingRule;
+
+/**
+ * Un outil qui modifie l'état (écrire un fichier, lancer une commande,
+ * créer un ticket). Après un tel appel, relire la même chose n'est pas
+ * une répétition : le résultat peut avoir changé.
+ */
+export function isMutatingTool(name: string): boolean {
+  return mutatingRule(name);
+}
+
+/** Remplace la règle par défaut (nom de l'outil → modifie l'état ?) ; undefined la rétablit. */
+export function setMutatingTools(rule: RegExp | string[] | ((toolName: string) => boolean) | undefined): void {
+  if (rule === undefined) mutatingRule = defaultMutatingRule;
+  else if (typeof rule === 'function') mutatingRule = rule;
+  else if (Array.isArray(rule)) {
+    const set = new Set(rule);
+    mutatingRule = (name) => set.has(name);
+  } else mutatingRule = (name) => rule.test(name);
+}
+
+/**
+ * Pour chaque appel d'outil, l'index de l'appel réussi qu'il répète
+ * (même outil, mêmes arguments), ou undefined. Règles :
+ *   - relancer après un échec est un retry, pas une répétition ;
+ *   - sans arguments capturés, on ne conclut rien ;
+ *   - un appel réussi qui modifie l'état « oublie » tous les autres :
+ *     relire un fichier ou relancer les tests après une modification est
+ *     normal. Refaire aussitôt la même écriture reste une répétition.
+ */
+function scanRepeats(steps: TrajectoryStep[]): Map<number, number> {
+  const out = new Map<number, number>();
+  const firstOk = new Map<string, number>();
+  const lastOutcome = new Map<string, 'ok' | 'error'>();
+  for (const s of steps) {
+    if (s.type !== 'tool_call') continue;
+    const mutating = isMutatingTool(s.name);
+    if (s.args !== undefined) {
+      const key = `${s.name}::${stableStringify(s.args)}`;
+      if (lastOutcome.get(key) === 'ok') out.set(s.index, firstOk.get(key)!);
+      if (!hasError(s) && !firstOk.has(key)) firstOk.set(key, s.index);
+      lastOutcome.set(key, hasError(s) ? 'error' : 'ok');
+    }
+    if (mutating && !hasError(s)) {
+      // L'état a pu changer : tout le reste est oublié. Le même appel
+      // refait juste après (même écriture, même commande) reste une répétition.
+      const self = s.args !== undefined ? `${s.name}::${stableStringify(s.args)}` : undefined;
+      for (const key of [...lastOutcome.keys()]) {
+        if (key === self) continue;
+        firstOk.delete(key);
+        lastOutcome.delete(key);
+      }
+    }
+  }
+  return out;
+}
+
 function stepName(s: TrajectoryStep): string {
   if (s.type === 'tool_call') return s.name;
   if (s.type === 'llm_call') return s.model ?? '';
@@ -158,14 +228,7 @@ export function computeMetrics(t: Trajectory): RunMetrics {
   // lui, avait RÉUSSI. Relancer après un échec est un retry (compté à
   // part), pas une boucle. Sans arguments capturés on ne conclut rien :
   // un outil peut légitimement être appelé plusieurs fois.
-  const lastOutcome = new Map<string, 'ok' | 'error'>();
-  let redundantToolCalls = 0;
-  for (const s of tools) {
-    if (s.args === undefined) continue;
-    const key = `${s.name}::${stableStringify(s.args)}`;
-    if (lastOutcome.get(key) === 'ok') redundantToolCalls++;
-    lastOutcome.set(key, hasError(s) ? 'error' : 'ok');
-  }
+  const redundantToolCalls = scanRepeats(t.steps).size;
 
   // Retries : un step qui suit immédiatement l'échec d'un step du même
   // type et du même nom (outil ou modèle).
@@ -245,14 +308,9 @@ export function annotateSteps(t: Trajectory): StepAnnotation[] {
     index: s.index,
     error: hasError(s) ? (s as { error?: string }).error : undefined,
   }));
-  const firstOk = new Map<string, number>();
-  const lastOutcome = new Map<string, 'ok' | 'error'>();
+  const repeats = scanRepeats(t.steps);
   t.steps.forEach((s, i) => {
-    if (s.type !== 'tool_call' || s.args === undefined) return;
-    const key = `${s.name}::${stableStringify(s.args)}`;
-    if (lastOutcome.get(key) === 'ok') out[i].repeatOf = firstOk.get(key);
-    if (!hasError(s) && !firstOk.has(key)) firstOk.set(key, s.index);
-    lastOutcome.set(key, hasError(s) ? 'error' : 'ok');
+    if (repeats.has(s.index)) out[i].repeatOf = repeats.get(s.index);
   });
   const meaningful = t.steps
     .map((s, i) => ({ s, i }))

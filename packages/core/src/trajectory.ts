@@ -133,6 +133,11 @@ export interface TrajectoryMetadata {
   status?: RunStatus;
   promptVersion?: string;
   scenario?: { name: string; persona?: string };
+  /**
+   * Scores de qualité du run, plus haut = mieux (de préférence entre 0 et 1) :
+   * exactitude, assertions respectées, jugement d'un LLM, retour utilisateur.
+   */
+  scores?: Record<string, number>;
   totalCostUsd?: number;
   totalDurationMs?: number;
   /** Format d'origine détecté par la normalisation. */

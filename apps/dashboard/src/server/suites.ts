@@ -88,7 +88,8 @@ async function scenarioRuns(db: Db, projectId: string, agent: string, dimension:
   return db.query<Record<string, unknown>>(
     `select id, scenario, status, duration_ms, cost_usd::float8 as cost_usd, step_count,
             input_tokens + output_tokens as total_tokens, tool_call_count, tool_error_count,
-            redundant_tool_calls, path_signature
+            redundant_tool_calls, path_signature,
+            (select jsonb_object_agg(rs.name, rs.value) from run_scores rs where rs.trajectory_id = trajectories.id)::text as scores_json
        from trajectories
       where project_id = $1 and agent_name = $2 and scenario is not null and ${col(dimension)} = $3
       order by started_at desc`,
@@ -108,6 +109,7 @@ function toScenarioRun(r: Record<string, unknown>): ScenarioRun {
     toolErrors: Number(r.tool_error_count),
     redundantToolCalls: Number(r.redundant_tool_calls),
     pathSignature: String(r.path_signature),
+    scores: r.scores_json ? (JSON.parse(String(r.scores_json)) as Record<string, number>) : undefined,
   };
 }
 

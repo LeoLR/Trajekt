@@ -11,7 +11,7 @@
  * (initialize, tools/list, tools/call, ping).
  */
 
-import { METRIC_LABELS, annotateSteps, type Comparison, type TrajectoryStep } from '@trajekt/core';
+import { metricLabel, annotateSteps, type Comparison, type TrajectoryStep } from '@trajekt/core';
 import type { Db } from './db';
 import {
   DIMENSIONS, agentVersions, compareLatestVersions, compareRecentWindow, compareValues,
@@ -89,7 +89,7 @@ function comparisonLine(c: Comparison): string {
   const values = c.baseline === null && c.current === null
     ? ''
     : `${formatMetric(c.metric, c.baseline)} → ${formatMetric(c.metric, c.current)} (${formatDelta(c.metric, c.delta, c.relDelta)})`;
-  return `- ${METRIC_LABELS[c.metric]}: ${values} — ${verdict}${c.detail && c.verdict === 'regression' ? `. ${c.detail}` : ''}`;
+  return `- ${metricLabel(c.metric)}: ${values} — ${verdict}${c.detail && c.verdict === 'regression' ? `. ${c.detail}` : ''}`;
 }
 
 function comparisonText(agent: string, r: ComparisonResult): string {
@@ -113,6 +113,8 @@ function runLine(r: RunSummary): string {
   ].filter(Boolean);
   const versions = [r.appVersion && r.appVersion !== r.agentVersion ? `app ${r.appVersion}` : null, r.agentVersion ? `agent ${r.agentVersion}` : null, r.promptVersion ? `prompt ${r.promptVersion}` : null, r.primaryModel].filter(Boolean).join(', ');
   const scenario = r.scenario ? ` · scenario ${r.scenario}` : '';
+  const scores = Object.entries(r.scores ?? {}).map(([k, v]) => `${k} ${v.toFixed(2)}`).join(', ');
+  if (scores) flags.push(`scores: ${scores}`);
   return `- ${r.id} · ${r.startedAt.slice(0, 16).replace('T', ' ')} UTC · ${r.status === 'ok' ? 'ok' : 'FAILED'} · ${formatDuration(r.durationMs)} · ${formatCost(r.costUsd, r.costEstimated)} · ${r.stepCount} steps · ${versions}${scenario}${flags.length ? ` · ${flags.join(', ')}` : ''}`;
 }
 
@@ -154,11 +156,11 @@ export const TOOLS: Tool[] = [
         failureRate24h: agent.errorRate24h,
         p50DurationMs24h: agent.p50DurationMs24h,
         meanCostUsd24h: agent.avgCostUsd24h,
-        regressions: findings.map((f) => ({ metric: f.metric, label: METRIC_LABELS[f.metric], severity: f.severity, baseline: f.baseline, current: f.current, comparedAs: f.scope })),
+        regressions: findings.map((f) => ({ metric: f.metric, label: metricLabel(f.metric), severity: f.severity, baseline: f.baseline, current: f.current, comparedAs: f.scope })),
       }));
       const text = page.agents.map(({ agent, health, findings }) => {
         const head = `${agent.name} — ${HEALTH_TEXT[health]}${agent.latestVersion ? `, agent ${agent.latestVersion}` : ''} · last 24 h: ${agent.runs24h} runs, ${formatPercent(agent.errorRate24h)} failed, p50 ${formatDuration(agent.p50DurationMs24h)}, mean cost ${formatCost(agent.avgCostUsd24h)}`;
-        const lines = findings.map((f) => `  - ${METRIC_LABELS[f.metric]}: ${formatMetric(f.metric, f.baseline)} → ${formatMetric(f.metric, f.current)} (${f.severity}, ${f.scope})`);
+        const lines = findings.map((f) => `  - ${metricLabel(f.metric)}: ${formatMetric(f.metric, f.baseline)} → ${formatMetric(f.metric, f.current)} (${f.severity}, ${f.scope})`);
         return [head, ...lines].join('\n');
       }).join('\n') + evalText;
       return { text, data: { now: now.toISOString(), agents: data, evalSuites: page.evals } };
@@ -267,7 +269,7 @@ export const TOOLS: Tool[] = [
         `${agent} eval suite — ${DIM_NAME[dim]} ${page.b} vs ${page.a}: ${c.result.toUpperCase()} (${c.paired} scenarios compared)`,
         ...c.reasons.map((r) => `  reason: ${r}`),
         'Across the suite:',
-        ...c.metrics.map((m) => `  - ${METRIC_LABELS[m.metric]}: ${m.verdict === 'insufficient' ? `not enough data (${m.detail})` : `${formatMetric(m.metric, m.baseline)} → ${formatMetric(m.metric, m.current)}${m.metric === 'newPathShare' ? '' : ` (${formatDelta(m.metric, m.delta, m.relDelta)})`}, ${m.verdict}${m.severity ? ` (${m.severity})` : ''}`}`),
+        ...c.metrics.map((m) => `  - ${metricLabel(m.metric)}: ${m.verdict === 'insufficient' ? `not enough data (${m.detail})` : `${formatMetric(m.metric, m.baseline)} → ${formatMetric(m.metric, m.current)}${m.metric === 'newPathShare' ? '' : ` (${formatDelta(m.metric, m.delta, m.relDelta)})`}, ${m.verdict}${m.severity ? ` (${m.severity})` : ''}`}`),
         worse.length ? `Scenarios that got worse (${worse.length}):` : 'No scenario got worse.',
         ...worse.map(changeLine),
         ...(better.length ? [`Scenarios that got better (${better.length}):`, ...better.map(changeLine)] : []),
@@ -297,11 +299,11 @@ export const TOOLS: Tool[] = [
       const lines = regressed.length
         ? regressed.flatMap(({ agent, findings }) => [
             `${agent.name}:`,
-            ...findings.map((f) => `  - ${METRIC_LABELS[f.metric]}: ${formatMetric(f.metric, f.baseline)} → ${formatMetric(f.metric, f.current)} (${formatDelta(f.metric, f.delta, f.relDelta)}, ${f.severity}) — ${f.scope}`),
+            ...findings.map((f) => `  - ${metricLabel(f.metric)}: ${formatMetric(f.metric, f.baseline)} → ${formatMetric(f.metric, f.current)} (${formatDelta(f.metric, f.delta, f.relDelta)}, ${f.severity}) — ${f.scope}`),
           ])
         : [`No regression detected${only ? ` for ${only}` : ''}.`];
       if (alerts.length) {
-        lines.push('', 'Alerts sent:', ...alerts.map((a) => `- ${a.createdAt.slice(0, 16).replace('T', ' ')} UTC · ${a.agentName} · ${METRIC_LABELS[a.metric]} (${a.severity}) · ${a.currentLabel} vs ${a.baselineLabel}`));
+        lines.push('', 'Alerts sent:', ...alerts.map((a) => `- ${a.createdAt.slice(0, 16).replace('T', ' ')} UTC · ${a.agentName} · ${metricLabel(a.metric)} (${a.severity}) · ${a.currentLabel} vs ${a.baselineLabel}`));
       }
       return {
         text: lines.join('\n'),

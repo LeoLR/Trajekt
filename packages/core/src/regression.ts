@@ -26,6 +26,15 @@ export type MetricKey =
   | 'redundantToolCalls'
   | 'newPathShare';
 
+/** Un score de qualité (plus haut = mieux), ex. « score:correct ». */
+export type ScoreKey = `score:${string}`;
+/** Toute métrique comparable : les métriques de run et les scores. */
+export type AnyMetricKey = MetricKey | ScoreKey;
+
+export function isScoreKey(k: string): k is ScoreKey {
+  return k.startsWith('score:');
+}
+
 export interface Moments {
   /** Nombre de runs ayant une valeur pour cette métrique. */
   n: number;
@@ -47,13 +56,15 @@ export interface WindowStats {
   redundantToolCalls: Moments;
   /** Nombre de runs par signature de chemin d'outils. */
   paths: Record<string, number>;
+  /** Scores de qualité par nom (runs qui ont ce score seulement). */
+  scores?: Record<string, Moments>;
 }
 
 export type Verdict = 'regression' | 'improvement' | 'stable' | 'insufficient';
 export type Severity = 'warning' | 'critical';
 
 export interface Comparison {
-  metric: MetricKey;
+  metric: AnyMetricKey;
   label: string;
   baseline: number | null;
   current: number | null;
@@ -76,6 +87,8 @@ export interface CompareOptions {
   minRelIncrease?: number;
   /** Hausse absolue minimale d'un taux (défaut 0.03 = +3 points). */
   minRateIncrease?: number;
+  /** Baisse minimale d'un score pour une régression (défaut 0.05, sur une échelle 0–1). */
+  minScoreDrop?: number;
 }
 
 export const METRIC_LABELS: Record<MetricKey, string> = {
@@ -88,6 +101,11 @@ export const METRIC_LABELS: Record<MetricKey, string> = {
   redundantToolCalls: 'Repeated tool calls',
   newPathShare: 'Runs on a new tool path',
 };
+
+/** Libellé lisible d'une métrique ou d'un score. */
+export function metricLabel(k: AnyMetricKey): string {
+  return isScoreKey(k) ? `Score · ${k.slice(6)}` : METRIC_LABELS[k];
+}
 
 /* ------------------------------------------------------------------ */
 /* Statistiques                                                         */
@@ -227,6 +245,34 @@ function comparePaths(a: WindowStats, b: WindowStats, o: Required<CompareOptions
   };
 }
 
+/** Un score : plus haut = mieux, la régression est une baisse. */
+function compareScore(name: string, a: Moments, b: Moments, o: Required<CompareOptions>): Comparison {
+  const metric: ScoreKey = `score:${name}`;
+  const label = metricLabel(metric);
+  if (a.n < o.minRuns || b.n < o.minRuns) {
+    return {
+      metric, label, baseline: a.n ? a.mean : null, current: b.n ? b.mean : null,
+      delta: null, relDelta: null, pValue: null, verdict: 'insufficient',
+      detail: `${a.n} vs ${b.n} scored runs — need at least ${o.minRuns} on each side`,
+    };
+  }
+  const delta = b.mean - a.mean;
+  const pDown = meanIncreasePValue(b, a); // la baisse de B
+  const pUp = meanIncreasePValue(a, b);
+  let verdict: Verdict = 'stable';
+  let severity: Severity | undefined;
+  if (pDown < o.alpha && -delta >= o.minScoreDrop) {
+    verdict = 'regression';
+    severity = -delta >= 0.15 ? 'critical' : 'warning';
+  } else if (pUp < o.alpha && delta >= o.minScoreDrop) {
+    verdict = 'improvement';
+  }
+  return {
+    metric, label, baseline: a.mean, current: b.mean, delta, relDelta: rel(a.mean, b.mean),
+    pValue: verdict === 'improvement' ? pUp : pDown, verdict, severity,
+  };
+}
+
 /**
  * Compare `current` à `baseline` sur toutes les métriques suivies.
  * Renvoie une comparaison par métrique, régression ou non : l'interface
@@ -242,8 +288,10 @@ export function compareWindows(
     alpha: options.alpha ?? 0.01,
     minRelIncrease: options.minRelIncrease ?? 0.15,
     minRateIncrease: options.minRateIncrease ?? 0.03,
+    minScoreDrop: options.minScoreDrop ?? 0.05,
   };
-  return [
+  const scoreNames = Object.keys(baseline.scores ?? {}).filter((k) => current.scores?.[k]).sort();
+  return holmAdjust([
     compareRate('errorRate', baseline.errorRuns, baseline.runs, current.errorRuns, current.runs, o.minRuns, o),
     compareRate('toolErrorRate', baseline.toolErrors, baseline.toolCalls, current.toolErrors, current.toolCalls, o.minRuns, o),
     compareMean('durationMs', baseline.durationMs, current.durationMs, o),
@@ -252,7 +300,35 @@ export function compareWindows(
     compareMean('totalTokens', baseline.totalTokens, current.totalTokens, o),
     compareMean('redundantToolCalls', baseline.redundantToolCalls, current.redundantToolCalls, o),
     comparePaths(baseline, current, o),
-  ];
+    ...scoreNames.map((k) => compareScore(k, baseline.scores![k], current.scores![k], o)),
+  ], o.alpha);
+}
+
+/**
+ * Correction de Holm-Bonferroni : on teste plusieurs métriques à la fois,
+ * donc une fausse alerte « par hasard » devient probable. Les verdicts
+ * (régression ou amélioration) qui ne tiennent plus après correction
+ * redeviennent « stable ». Les métriques sans p-valeur ne sont pas touchées.
+ */
+export function holmAdjust(comparisons: Comparison[], alpha: number): Comparison[] {
+  const tested = comparisons
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => c.pValue !== null && c.verdict !== 'insufficient')
+    .sort((a, b) => a.c.pValue! - b.c.pValue!);
+  const m = tested.length;
+  const out = [...comparisons];
+  let stopped = false;
+  tested.forEach(({ c, i }, k) => {
+    if (!stopped && c.pValue! <= alpha / (m - k)) return;
+    stopped = true;
+    if (c.verdict === 'regression' || c.verdict === 'improvement') {
+      out[i] = {
+        ...c, verdict: 'stable', severity: undefined,
+        detail: `Not significant once corrected for the ${m} metrics tested at once (p = ${c.pValue!.toPrecision(2)})`,
+      };
+    }
+  });
+  return out;
 }
 
 export function regressionsOnly(comparisons: Comparison[]): Comparison[] {

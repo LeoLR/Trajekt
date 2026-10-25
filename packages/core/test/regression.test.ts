@@ -89,3 +89,17 @@ test('base nulle : passer de 0 à des boucles est une régression critique', () 
   assert.equal(r.severity, 'critical');
   assert.equal(r.relDelta, null);
 });
+
+test('Holm : un verdict qui ne tient pas une fois corrigé redevient stable', async () => {
+  const { holmAdjust } = await import('../src/index.js');
+  const c = (metric: any, pValue: number | null, verdict: any) => ({ metric, label: metric, baseline: 1, current: 2, delta: 1, relDelta: 1, pValue, verdict });
+  const out = holmAdjust([
+    c('costUsd', 0.001, 'regression'),     // 0.001 ≤ 0.05/4 : tient
+    c('durationMs', 0.02, 'regression'),   // 0.02 > 0.05/3 : tombe
+    c('stepCount', 0.03, 'improvement'),   // après l'arrêt : tombe
+    c('totalTokens', 0.5, 'stable'),
+    c('newPathShare', null, 'regression'), // pas de p-valeur : inchangé
+  ], 0.05);
+  assert.deepEqual(out.map((x) => x.verdict), ['regression', 'stable', 'stable', 'stable', 'regression']);
+  assert.match(out[1].detail!, /corrected for the 4 metrics/);
+});

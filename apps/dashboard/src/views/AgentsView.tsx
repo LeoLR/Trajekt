@@ -1,4 +1,4 @@
-import { METRIC_LABELS } from '@trajekt/core';
+import { metricLabel } from '@trajekt/core';
 import type { AgentsPageData, Health } from '../server/pages';
 import { Shell, StatusDot } from '../components/ui';
 import { Sparkline } from '../components/charts';
@@ -72,7 +72,7 @@ export function AgentsView({ data }: { data: AgentsPageData }) {
                   {findings.slice(0, 4).map((f) => (
                     <div className="finding" key={f.metric}>
                       <span className={f.severity === 'critical' ? 'chip chip-err' : 'chip chip-amber'}>{formatDelta(f.metric, f.delta, f.relDelta)}</span>
-                      <span>{METRIC_LABELS[f.metric]}</span>
+                      <span>{metricLabel(f.metric)}</span>
                       <span className="mono faint" style={{ fontSize: 12 }}>
                         {formatMetric(f.metric, f.baseline)} → {formatMetric(f.metric, f.current)} · {f.scope}
                       </span>
@@ -128,7 +128,7 @@ export function AgentsView({ data }: { data: AgentsPageData }) {
                   <tr key={a.id}>
                     <td className="faint">{formatRelativeTime(a.createdAt, now)}</td>
                     <td className="mono"><a href={`/agents/${encodeURIComponent(a.agentName)}`}>{a.agentName}</a></td>
-                    <td><span className={a.severity === 'critical' ? 'chip chip-err' : 'chip chip-amber'}>{a.severity}</span> {METRIC_LABELS[a.metric]}</td>
+                    <td><span className={a.severity === 'critical' ? 'chip chip-err' : 'chip chip-amber'}>{a.severity}</span> {metricLabel(a.metric)}</td>
                     <td className="num">{formatMetric(a.metric, a.baseline)}</td>
                     <td className="num">{formatMetric(a.metric, a.current)}</td>
                     <td className="faint mono" style={{ fontSize: 12 }}>{a.currentLabel} vs {a.baselineLabel}</td>

@@ -130,9 +130,9 @@ test('annotations : REPEAT #n, tentatives, erreurs', () => {
   const tid = 'ann';
   const t = normalize(otlpPayload([
     otlpSpan(tid, { spanId: '1', name: 't', startMs: 1, endMs: 2, attrs: toolAttrs('gitlab.searchCode', { q: 'x' }) }),
-    otlpSpan(tid, { spanId: '2', name: 't', startMs: 3, endMs: 4, attrs: toolAttrs('jira.createIssue', { p: 1 }), error: '429' }),
-    otlpSpan(tid, { spanId: '3', name: 't', startMs: 5, endMs: 6, attrs: toolAttrs('jira.createIssue', { p: 1 }), error: '429' }),
-    otlpSpan(tid, { spanId: '4', name: 't', startMs: 7, endMs: 8, attrs: toolAttrs('jira.createIssue', { p: 1 }) }),
+    otlpSpan(tid, { spanId: '2', name: 't', startMs: 3, endMs: 4, attrs: toolAttrs('jira.searchIssues', { p: 1 }), error: '429' }),
+    otlpSpan(tid, { spanId: '3', name: 't', startMs: 5, endMs: 6, attrs: toolAttrs('jira.searchIssues', { p: 1 }), error: '429' }),
+    otlpSpan(tid, { spanId: '4', name: 't', startMs: 7, endMs: 8, attrs: toolAttrs('jira.searchIssues', { p: 1 }) }),
     otlpSpan(tid, { spanId: '5', name: 't', startMs: 9, endMs: 10, attrs: toolAttrs('gitlab.searchCode', { q: 'x' }) }),
   ]));
   const a = annotateSteps(t);
@@ -157,4 +157,43 @@ test('chemin : répétition visible, relance ignorée', () => {
     otlpSpan(tid, { spanId: '4', name: 't', startMs: 7, endMs: 8, attrs: toolAttrs('jira', { a: 1 }) }),
   ]));
   assert.equal(computeMetrics(t).pathSignature, 'search ×2 → jira');
+});
+
+test('répétitions : relire après une modification n’est pas une boucle', async () => {
+  const { computeMetrics, annotateSteps, isMutatingTool, setMutatingTools, SCHEMA_VERSION } = await import('../src/index.js');
+  const step = (index: number, name: string, args: unknown) => ({ type: 'tool_call' as const, index, name, args });
+  const run = (steps: ReturnType<typeof step>[]) => ({ schemaVersion: SCHEMA_VERSION, id: 'x', source: 'live' as const, steps, metadata: {} });
+
+  // Agent de dev : lire, éditer, relire, tester, éditer, retester.
+  const dev = run([
+    step(0, 'Read', { file_path: 'a.ts' }),
+    step(1, 'Edit', { file_path: 'a.ts', old: '1', new: '2' }),
+    step(2, 'Read', { file_path: 'a.ts' }),
+    step(3, 'Bash', { command: 'npm test' }),
+    step(4, 'Edit', { file_path: 'a.ts', old: '2', new: '3' }),
+    step(5, 'Bash', { command: 'npm test' }),
+  ]);
+  assert.equal(computeMetrics(dev).redundantToolCalls, 0);
+
+  // Mais relire sans rien modifier entre deux, ou refaire la même écriture, reste une répétition.
+  const loop = run([
+    step(0, 'gitlab.searchCode', { q: 'x' }),
+    step(1, 'gitlab.readFile', { path: 'a' }),
+    step(2, 'gitlab.searchCode', { q: 'x' }),
+    step(3, 'jira.createIssue', { project: 'PAY' }),
+    step(4, 'jira.createIssue', { project: 'PAY' }),
+  ]);
+  assert.equal(computeMetrics(loop).redundantToolCalls, 2);
+  assert.deepEqual(annotateSteps(loop).map((a) => a.repeatOf), [undefined, undefined, 0, undefined, 3]);
+
+  assert.equal(isMutatingTool('gitlab.readFile'), false);
+  assert.equal(isMutatingTool('slack.postMessage'), true);
+  assert.equal(isMutatingTool('str_replace_editor'), true);
+  assert.equal(isMutatingTool('sentry.getIssue'), false);
+  setMutatingTools(['Read']);
+  assert.equal(isMutatingTool('Read'), true);
+  setMutatingTools(/^(Edit|Write|Bash)$/);
+  assert.equal(computeMetrics(dev).redundantToolCalls, 0);
+  setMutatingTools(undefined); // règle par défaut
+  assert.equal(isMutatingTool('Read'), false);
 });

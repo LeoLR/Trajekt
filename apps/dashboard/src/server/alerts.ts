@@ -10,7 +10,7 @@
  * délai de cooldown, pour que Slack ne devienne pas du bruit.
  */
 
-import { METRIC_LABELS, type Comparison } from '@trajekt/core';
+import { metricLabel, type Comparison, type AnyMetricKey } from '@trajekt/core';
 import type { Db } from './db';
 import { asJson } from './ingest';
 import { agentVersions, compareLatestVersions, compareRecentWindow, type ComparisonResult } from './queries';
@@ -133,7 +133,7 @@ export interface AlertRow {
   id: string;
   agentName: string;
   mode: 'window' | 'version';
-  metric: keyof typeof METRIC_LABELS;
+  metric: AnyMetricKey;
   severity: 'warning' | 'critical';
   baseline: number | null;
   current: number | null;
@@ -186,7 +186,7 @@ export function slackMessage(alerts: NewAlert[], dashboardUrl?: string) {
     const icon = c.severity === 'critical' ? ':red_circle:' : ':large_orange_circle:';
     const scope = `${a.currentLabel} vs ${a.baselineLabel}`;
     const link = dashboardUrl ? ` <${dashboardUrl}/agents/${encodeURIComponent(a.agentName)}|open>` : '';
-    return `${icon} *${a.agentName}* — ${METRIC_LABELS[c.metric]}: ${formatMetric(c.metric, c.baseline)} → ${formatMetric(c.metric, c.current)} (${formatDelta(c.metric, c.delta, c.relDelta)}) · ${scope}${link}`;
+    return `${icon} *${a.agentName}* — ${metricLabel(c.metric)}: ${formatMetric(c.metric, c.baseline)} → ${formatMetric(c.metric, c.current)} (${formatDelta(c.metric, c.delta, c.relDelta)}) · ${scope}${link}`;
   });
   return {
     text: `Trajekt: ${alerts.length} regression${alerts.length > 1 ? 's' : ''} detected`,

@@ -1,6 +1,6 @@
 /** Mise en forme partagée par l'interface et les alertes Slack. */
 
-import type { MetricKey, TrajectoryStep } from '@trajekt/core';
+import type { AnyMetricKey, TrajectoryStep } from '@trajekt/core';
 
 export function formatDuration(ms: number | null | undefined): string {
   if (ms == null) return '—';
@@ -28,7 +28,13 @@ export function formatNumber(v: number | null | undefined, digits = 1): string {
   return Number.isInteger(v) ? String(v) : v.toFixed(digits);
 }
 
-export function formatMetric(metric: MetricKey, v: number | null | undefined): string {
+/** Un score de qualité : deux décimales (échelle 0–1 en général). */
+export function formatScore(v: number | null | undefined): string {
+  return v == null ? '—' : v.toFixed(2);
+}
+
+export function formatMetric(metric: AnyMetricKey, v: number | null | undefined): string {
+  if (metric.startsWith('score:')) return formatScore(v);
   switch (metric) {
     case 'errorRate':
     case 'toolErrorRate':
@@ -46,9 +52,10 @@ export function formatMetric(metric: MetricKey, v: number | null | undefined): s
 }
 
 /** "+33%" ou "+12 pts" pour un taux. */
-export function formatDelta(metric: MetricKey, delta: number | null, relDelta: number | null): string {
+export function formatDelta(metric: AnyMetricKey, delta: number | null, relDelta: number | null): string {
   if (delta == null) return '—';
   const sign = delta > 0 ? '+' : delta < 0 ? '−' : '';
+  if (metric.startsWith('score:')) return `${sign}${Math.abs(delta).toFixed(2)}`;
   if (metric === 'errorRate' || metric === 'toolErrorRate' || metric === 'newPathShare') {
     return `${sign}${Math.abs(delta * 100).toFixed(1)} pts`;
   }

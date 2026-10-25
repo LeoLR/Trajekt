@@ -13,7 +13,7 @@ function changeText(c: ScenarioChange): string {
 }
 
 function ChangeChip({ c }: { c: ScenarioChange }) {
-  const cls = c.direction === 'worse' ? (c.metric === 'errorRate' ? 'chip chip-err' : 'chip chip-amber') : c.direction === 'better' ? 'chip chip-ok' : 'chip';
+  const cls = c.direction === 'worse' ? (c.metric === 'errorRate' || c.metric.startsWith('score:') ? 'chip chip-err' : 'chip chip-amber') : c.direction === 'better' ? 'chip chip-ok' : 'chip';
   return <span className={`${cls} scenario-change`} title={c.metric === 'newPathShare' ? c.detail : undefined}>{c.metric === 'newPathShare' ? c.label : changeText(c)}</span>;
 }
 
@@ -111,7 +111,7 @@ export function EvalView({ data, now: nowIso }: { data: SuitePageData; now: stri
                 </table>
               </div>
               <div className="panel-pad faint" style={{ fontSize: 12, borderTop: '1px solid var(--border)' }}>
-                Values are means of the per-scenario averages. Each scenario is paired with itself (Wilcoxon signed-rank test, one-sided, p &lt; 0.05); duration, cost, steps and tokens are compared as ratios, so a large scenario does not outweigh a small one. A metric is flagged only if the typical change is also large enough (+15%, or +5 pts on a rate), with at least 5 scenarios.
+                Values are means of the per-scenario averages. Each scenario is paired with itself (Wilcoxon signed-rank test, one-sided, p &lt; 0.05); duration, cost, steps and tokens are compared as ratios, so a large scenario does not outweigh a small one. Scores (higher is better) come first. A metric is flagged only if it stays significant after correcting for the number of metrics tested (Holm) and the typical change is large enough (+15%, +5 pts on a rate, −0.05 on a score), with at least 8 scenarios.
               </div>
             </div>
           </section>
@@ -163,7 +163,7 @@ export function EvalView({ data, now: nowIso }: { data: SuitePageData; now: stri
               </p>
             )}
             <p className="faint" style={{ fontSize: 12, marginTop: 8 }}>
-              A scenario is flagged when its failure rate rises by 50 points or more (e.g. 0/3 → 2/3), when duration, cost, steps or tokens grow by 50% or more, when it repeats a tool call it did not repeat before, or when it takes a tool path never seen in A.
+              A scenario is flagged when its failure rate rises by 50 points or more (e.g. 0/3 → 2/3), when a score drops by 0.25 or more, when duration, cost, steps or tokens grow by 50% or more, when it repeats a tool call it did not repeat before, or when it takes a tool path never seen in A.
             </p>
           </section>
         </>

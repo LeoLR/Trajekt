@@ -3,13 +3,14 @@
  * résultat Vercel AI SDK, ou Trajectory native).
  *
  * Compatible avec un exporter OTel pointé sur la racine de Trajekt :
- * l'exporter ajoute lui-même /v1/traces. Encodage JSON uniquement
- * (OTEL_EXPORTER_OTLP_PROTOCOL=http/json) ; gzip accepté.
+ * l'exporter ajoute lui-même /v1/traces. OTLP/HTTP en JSON ou en protobuf
+ * (application/x-protobuf, le défaut de plusieurs SDK) ; gzip accepté.
+ * gRPC n'est pas pris en charge.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { gunzipSync } from 'node:zlib';
-import { UnknownFormatError } from '@trajekt/core';
+import { UnknownFormatError, decodeOtlpProtobuf } from '@trajekt/core';
 import { getDb } from '../../../server/db';
 import { verifyProjectApiKey } from '../../../server/auth';
 import { ingestPayload } from '../../../server/ingest';
@@ -25,20 +26,28 @@ export async function POST(req: NextRequest) {
   if (!project) return apiError('UNAUTHORIZED', 'Missing or invalid project API key.');
 
   const contentType = req.headers.get('content-type') ?? '';
-  if (contentType.includes('protobuf')) {
-    return apiError(
-      'UNSUPPORTED_MEDIA_TYPE',
-      'OTLP protobuf is not supported yet. Configure the exporter with OTEL_EXPORTER_OTLP_PROTOCOL=http/json.',
-    );
-  }
+  const isProtobuf = contentType.includes('protobuf');
 
   let raw: unknown;
+  let body: Buffer;
   try {
-    let body = Buffer.from(await req.arrayBuffer());
+    body = Buffer.from(await req.arrayBuffer());
     if (req.headers.get('content-encoding') === 'gzip') body = gunzipSync(body);
-    raw = JSON.parse(body.toString('utf8'));
   } catch {
-    return apiError('VALIDATION_ERROR', 'Request body is not valid JSON.');
+    return apiError('VALIDATION_ERROR', 'Could not read the request body (bad gzip?).');
+  }
+  if (isProtobuf) {
+    try {
+      raw = decodeOtlpProtobuf(new Uint8Array(body.buffer, body.byteOffset, body.byteLength));
+    } catch (e) {
+      return apiError('VALIDATION_ERROR', `Request body is not a valid OTLP protobuf ExportTraceServiceRequest: ${(e as Error).message}`);
+    }
+  } else {
+    try {
+      raw = JSON.parse(body.toString('utf8'));
+    } catch {
+      return apiError('VALIDATION_ERROR', 'Request body is not valid JSON. For OTLP protobuf, send Content-Type: application/x-protobuf.');
+    }
   }
 
   try {
@@ -51,6 +60,8 @@ export async function POST(req: NextRequest) {
       scenario: req.headers.get('x-trajekt-scenario') ?? undefined,
     });
     if (runs.length === 0) return apiError('VALIDATION_ERROR', 'No usable trace in this payload.');
+    // Un exporter protobuf attend un ExportTraceServiceResponse protobuf : vide = succès complet.
+    if (isProtobuf) return new Response(new Uint8Array(0), { status: 200, headers: { 'content-type': 'application/x-protobuf' } });
     return NextResponse.json({ trajectories: runs }, { status: 201 });
   } catch (e) {
     if (e instanceof UnknownFormatError) return apiError('UNKNOWN_FORMAT', e.message);
