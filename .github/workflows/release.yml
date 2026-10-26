@@ -1,15 +1,27 @@
 name: Release @trajekt-ai/core
 
-# Publie @trajekt-ai/core sur npm quand on pousse un tag core-vX.Y.Z
-# (la version du tag doit être celle de packages/core/package.json).
-# Secret requis : NPM_TOKEN (jeton npm « Automation » ou granulaire, droit de publication).
+# Publie @trajekt-ai/core sur npm :
+#  - quand la version de packages/core/package.json change sur main : le job
+#    publie puis crée le tag core-vX.Y.Z ;
+#  - ou quand on pousse un tag core-vX.Y.Z à la main (une release GitHub), qui
+#    doit correspondre à la version du package.
+# Une version déjà publiée sur npm est ignorée : relancer le job ne fait rien.
+# Secret requis : NPM_TOKEN (jeton npm granulaire, droit de publication, « bypass 2FA »).
 on:
   push:
+    branches: [main]
+    paths:
+      - packages/core/package.json
+      - .github/workflows/release.yml
     tags: ['core-v*']
 
 permissions:
-  contents: read
+  contents: write # créer le tag core-vX.Y.Z après publication
   id-token: write # pour --provenance, à remettre quand le repo sera public
+
+concurrency:
+  group: release-core
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -21,15 +33,39 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      - run: pnpm install --frozen-lockfile
-      - name: Tag matches the package version
+      - name: Version to publish
+        id: version
         working-directory: packages/core
         run: |
           v=$(node -p "require('./package.json').version")
-          [ "core-v$v" = "$GITHUB_REF_NAME" ] || { echo "::error::tag $GITHUB_REF_NAME but package.json says $v"; exit 1; }
-      - run: pnpm --filter @trajekt-ai/core build
-      - run: pnpm --filter @trajekt-ai/core test
-      - working-directory: packages/core
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "core-v$v" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME but package.json says $v"; exit 1
+          fi
+          if npm view "@trajekt-ai/core@$v" version >/dev/null 2>&1; then
+            echo "@trajekt-ai/core@$v is already on npm, nothing to publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.version.outputs.publish == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.version.outputs.publish == 'true'
+        run: pnpm --filter @trajekt-ai/core build
+      - if: steps.version.outputs.publish == 'true'
+        run: pnpm --filter @trajekt-ai/core test
+      - if: steps.version.outputs.publish == 'true'
+        working-directory: packages/core
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Tag the release
+        if: steps.version.outputs.publish == 'true' && github.ref_type == 'branch'
+        run: |
+          tag="core-v${{ steps.version.outputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists"
+          else
+            git tag "$tag" "$GITHUB_SHA"
+            git push origin "$tag"
+          fi
