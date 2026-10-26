@@ -80,7 +80,7 @@ export function shortId(id: string): string {
 /** Libellé court d'un step (nom de l'outil, modèle…). */
 export function stepTitle(s: TrajectoryStep): string {
   switch (s.type) {
-    case 'llm_call': return s.model ?? 'llm call';
+    case 'llm_call': return s.name ?? s.model ?? 'llm call';
     case 'tool_call': return s.name;
     case 'custom': return s.kind;
     case 'decision': return s.branch;

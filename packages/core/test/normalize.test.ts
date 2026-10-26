@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalize, normalizeAll, mergeTrajectories, computeMetrics, diffTrajectories } from '../src/index.js';
-import { otlpPayload, otlpSpan, sentryRun, langfuseTrace, toolAttrs } from './fixtures.js';
+import { otlpPayload, otlpSpan, sentryRun, langfuseTrace, toolAttrs, type SpanSpec } from './fixtures.js';
 
 test('OTLP : identité de l’agent lue sur la racine puis la ressource', () => {
   const [t] = normalizeAll(otlpPayload(sentryRun()));
@@ -22,6 +22,18 @@ test('OTLP : identité de l’agent lue sur la racine puis la ressource', () => 
   const llm = t.steps.find((s) => s.type === 'llm_call') as any;
   assert.equal(llm.model, 'claude-sonnet-4-5');
   assert.deepEqual(llm.usage, { inputTokens: 2000, outputTokens: 300 });
+});
+
+test('OTLP : trajekt.step.name nomme un appel LLM, le modèle reste lu', () => {
+  const span = (spanId: string, attrs: SpanSpec['attrs']) => otlpSpan('f0', { spanId, name: 'span', startMs: 0, endMs: 1, attrs });
+  const t = normalize(otlpPayload([
+    span('a1', { 'gen_ai.request.model': { stringValue: 'sonnet' }, 'trajekt.step.name': { stringValue: 'DEVELOP#2' } }),
+    span('a2', { 'gen_ai.request.model': { stringValue: 'sonnet' } }),
+  ]));
+  const [named, plain] = t.steps as any[];
+  assert.equal(named.name, 'DEVELOP#2');
+  assert.equal(named.model, 'sonnet');
+  assert.equal('name' in plain, false); // sans l'attribut : rien ne change
 });
 
 test('OTLP : un payload multi-traces donne une trajectoire par traceId', () => {
