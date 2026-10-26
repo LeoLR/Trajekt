@@ -326,9 +326,11 @@ function otlpFromEntries(entries: OtlpEntry[]): Trajectory {
         maybeJson(attrs['gen_ai.output.messages']) ?? flattenedMessages(attrs, 'llm.output_messages'),
       );
       const text = str(attrs['ai.response.text']) ?? outMessages[0]?.content;
+      const name = str(attrs['trajekt.step.name']);
       return {
         ...base,
         type: 'llm_call' as const,
+        ...(name ? { name } : {}),
         model: str(
           attrs['gen_ai.response.model'] ?? attrs['gen_ai.request.model'] ?? attrs['ai.model.id'] ??
             attrs['llm.model_name'],

@@ -71,6 +71,8 @@ export interface BaseStep {
 
 export interface LlmCallStep extends BaseStep {
   type: 'llm_call';
+  /** Nom donné par la source (`trajekt.step.name` : « DEVELOP#2 »…) ; à défaut, le modèle sert de titre. */
+  name?: string;
   model?: string;
   input: Message[];
   output?: Message;

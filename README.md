@@ -108,7 +108,7 @@ await generateText({
 });
 ```
 
-Trajekt recognises spans that follow the OpenTelemetry GenAI semantic conventions (`gen_ai.*`) and the Vercel AI SDK telemetry spans (`ai.*`). Set `service.version` for the app version, and `trajekt.agent.version` / `trajekt.prompt.version` when the agent or its prompt change on their own:
+Trajekt recognises spans that follow the OpenTelemetry GenAI semantic conventions (`gen_ai.*`) and the Vercel AI SDK telemetry spans (`ai.*`). Set `service.version` for the app version, and `trajekt.agent.version` / `trajekt.prompt.version` when the agent or its prompt change on their own. An LLM step is titled by its model; set `trajekt.step.name` on its span to name it instead (an agent phase such as `PLAN` or `DEVELOP#2`):
 
 ```bash
 OTEL_RESOURCE_ATTRIBUTES=service.version=3.2.0,trajekt.agent.version=1.5.0,trajekt.prompt.version=v8
