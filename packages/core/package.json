@@ -1,6 +1,6 @@
 {
   "name": "@trajekt-ai/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Normalize AI agent traces (OpenTelemetry/OTLP JSON and protobuf, OpenInference, Langfuse, Vercel AI SDK), compute per-run metrics, detect regressions between versions, compare eval suites and assert on trajectories.",
   "keywords": [
     "ai-agents",
