@@ -14,7 +14,7 @@
  */
 
 import postgres from 'postgres';
-import { setPricing } from '@trajekt/core';
+import { setPricing } from '@trajekt-ai/core';
 
 export interface Db {
   query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]>;

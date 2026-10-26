@@ -6,7 +6,7 @@
  * lit — conventions GenAI d'OpenTelemetry plus les quelques clés trajekt.*.
  *
  *   import { trace } from '@opentelemetry/api';
- *   import { traceRun, traceTool } from '@trajekt/core';
+ *   import { traceRun, traceTool } from '@trajekt-ai/core';
  *   const tracer = trace.getTracer('my-agent');
  *
  *   await traceRun(tracer, { agent: 'sentry-triage', agentVersion: '1.5.0', promptVersion: 'v8' }, async (run) => {

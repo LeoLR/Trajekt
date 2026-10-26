@@ -1,4 +1,4 @@
-# @trajekt/core
+# @trajekt-ai/core
 
 The engine behind Trajekt: read any agent trace into one model, then measure it.
 
@@ -26,12 +26,12 @@ The engine behind Trajekt: read any agent trace into one model, then measure it.
 - **`traceAnthropic(client, tracer)`** — wraps an Anthropic SDK client: every `messages.create` records the model, tokens (prompt cache included, priced as such) and messages. `traceLlm(tracer, { model, input }, fn)` does the same around any Anthropic or OpenAI call.
 
 ```bash
-npm i @trajekt/core
+npm i @trajekt-ai/core
 ```
 
 ```ts
 import { trace } from '@opentelemetry/api';
-import { traceRun, traceTool } from '@trajekt/core';
+import { traceRun, traceTool } from '@trajekt-ai/core';
 
 const tracer = trace.getTracer('sentry-triage');
 await traceRun(tracer, { agent: 'sentry-triage', agentVersion: '1.5.0', promptVersion: 'v8' }, async (run) => {
@@ -42,7 +42,7 @@ await traceRun(tracer, { agent: 'sentry-triage', agentVersion: '1.5.0', promptVe
 ```
 
 ```ts
-import { normalize, computeMetrics, annotateSteps } from '@trajekt/core';
+import { normalize, computeMetrics, annotateSteps } from '@trajekt-ai/core';
 
 const run = normalize(otlpPayload);   // one trace; use normalizeAll() for a batch
 computeMetrics(run);
@@ -86,5 +86,5 @@ A span is an error when its status is `ERROR` or when it carries an `exception` 
 ## Tests
 
 ```bash
-pnpm --filter @trajekt/core test
+pnpm --filter @trajekt-ai/core test
 ```

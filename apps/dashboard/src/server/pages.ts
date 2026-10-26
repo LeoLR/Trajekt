@@ -3,7 +3,7 @@
  * pour être testable (et rendu hors de Next pour les captures).
  */
 
-import { annotateSteps, diffTrajectories, type Comparison, type StepAnnotation, type TrajectoryDiff } from '@trajekt/core';
+import { annotateSteps, diffTrajectories, type Comparison, type StepAnnotation, type TrajectoryDiff } from '@trajekt-ai/core';
 import type { Db } from './db';
 import {
   DIMENSIONS, compareValues, type Dimension,

@@ -30,7 +30,7 @@ create table if not exists trajectories (
   source               text not null,               -- live | replay | simulation
   source_format        text,                        -- otlp | langfuse | ai-sdk | trajekt
 
-  -- Métriques du run (computeMetrics de @trajekt/core).
+  -- Métriques du run (computeMetrics de @trajekt-ai/core).
   status               text not null check (status in ('ok', 'error')),
   started_at           timestamptz not null,
   duration_ms          int,

@@ -7,7 +7,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import type { StepAnnotation, Trajectory, TrajectoryStep } from '@trajekt/core';
+import type { StepAnnotation, Trajectory, TrajectoryStep } from '@trajekt-ai/core';
 import { formatCost, formatDuration, stepTitle } from '../lib/format';
 import type { Lang } from '../lib/i18n';
 

@@ -19,7 +19,7 @@
     "import-langfuse": "tsx scripts/import-langfuse.ts"
   },
   "dependencies": {
-    "@trajekt/core": "workspace:*",
+    "@trajekt-ai/core": "workspace:*",
     "next": "^15.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

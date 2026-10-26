@@ -3,7 +3,7 @@
  *
  * Usage minimal, zéro config :
  *
- *   import { normalize } from '@trajekt/core';
+ *   import { normalize } from '@trajekt-ai/core';
  *   const trajectory = normalize(anyTraceJson); // Langfuse, OTLP, AI SDK...
  */
 

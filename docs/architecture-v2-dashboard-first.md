@@ -143,7 +143,7 @@ démontrable en 30 secondes à un prospect ou sur LinkedIn — l'objectif
 1. **Ingestion OTLP brute vs SDK dédié** — recommandation : accepter de
    l'OTLP standard dès le départ (n'importe quel exporter OTel pointe
    dessus sans code custom, on réutilise le normalizer déjà écrit). Un
-   SDK `@trajekt/sdk` plus ergonomique peut venir après, en sucre.
+   SDK `@trajekt-ai/sdk` plus ergonomique peut venir après, en sucre.
 2. **Auth minimale phase 1** — une clé API par projet suffit pour
    l'ingestion ; l'accès au dashboard lui-même (login) peut rester très
    simple (un seul compte) tant qu'il n'y a pas de multi-utilisateur à

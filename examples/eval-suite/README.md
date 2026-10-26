@@ -17,5 +17,5 @@ npx tsx examples/eval-suite/compare.ts v2 v1   # PASS
 In your project:
 
 - `agent.ts` is your real agent, with a real model, wired to mocked tools. Its trajectory comes from your OpenTelemetry instrumentation (`normalize`) or your framework.
-- Imports become `@trajekt/core` (here they point at the source of the repository).
+- Imports become `@trajekt-ai/core` (here they point at the source of the repository).
 - To see the suites in the dashboard, send the runs to Trajekt with a `trajekt.scenario` attribute and the version under test (`trajekt.agent.version`, `trajekt.prompt.version`…), then open `/agents/<name>/evals`. See [Testing your agent](https://trajekt-eight.vercel.app/docs/#testing).

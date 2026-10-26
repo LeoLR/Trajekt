@@ -40,7 +40,7 @@ const SECTIONS: Array<[string, string, Array<[string, string]>?]> = [
   ['regressions', 'Regression alerts'],
   ['projects', 'Projects & operations', [['redaction', 'Sensitive data']]],
   ['ai', 'Ask your agents (MCP)', [['read-keys', 'Read API keys'], ['mcp-tools', 'Tools']]],
-  ['library', '@trajekt/core'],
+  ['library', '@trajekt-ai/core'],
   ['testing', 'Testing your agent', [['test-assert', 'Assert on a run'], ['eval-suites', 'Eval suites'], ['eval-ci', 'In CI'], ['test-trajekt', 'Test Trajekt itself']]],
   ['api', 'API reference'],
   ['troubleshooting', 'Troubleshooting'],
@@ -89,7 +89,7 @@ export function Docs() {
           <p>Trajekt has two parts:</p>
           <ul>
             <li><strong>The server</strong> (<C>apps/dashboard</C>): a Next.js app with one Postgres. It receives traces on <C>POST /v1/traces</C>, stores one row per run, and serves the dashboard.</li>
-            <li><strong>The library</strong> (<C>@trajekt/core</C>): reads a trace from any supported format into one model, computes its metrics and compares groups of runs. The server uses it; you can use it in your own tests.</li>
+            <li><strong>The library</strong> (<C>@trajekt-ai/core</C>): reads a trace from any supported format into one model, computes its metrics and compares groups of runs. The server uses it; you can use it in your own tests.</li>
           </ul>
           <p>Your agent does not need a Trajekt SDK. It sends standard OpenTelemetry spans, or you post a trace file.</p>
 
@@ -133,7 +133,7 @@ docker compose down -v           # stop and delete the database volume
           <p>You need Node.js 22, pnpm 10 and a Postgres database.</p>
           <Code>{`
 pnpm install
-pnpm --filter @trajekt/core build    # the dashboard imports the built package
+pnpm --filter @trajekt-ai/core build    # the dashboard imports the built package
 
 cd apps/dashboard
 cp .env.example .env                 # DATABASE_URL, DASHBOARD_PASSWORD, DASHBOARD_SESSION_SECRET
@@ -202,11 +202,11 @@ new NodeSDK({
 
           <H3 id="send-helpers">Instrument your code</H3>
           <p>
-            If your agent is hand-written, <C>@trajekt/core</C> has two helpers that create the spans Trajekt expects, with any OpenTelemetry tracer. Tool arguments matter: without them, repeated calls cannot be detected.
+            If your agent is hand-written, <C>@trajekt-ai/core</C> has two helpers that create the spans Trajekt expects, with any OpenTelemetry tracer. Tool arguments matter: without them, repeated calls cannot be detected.
           </p>
           <Code lang="ts" label="agent.ts">{`
 import { trace } from '@opentelemetry/api';
-import { traceRun, traceTool } from '@trajekt/core';
+import { traceRun, traceTool } from '@trajekt-ai/core';
 
 const tracer = trace.getTracer('sentry-triage');
 
@@ -222,7 +222,7 @@ await traceRun(tracer, { agent: 'sentry-triage', agentVersion: '1.5.0', promptVe
           </p>
           <Code lang="ts">{`
 import Anthropic from '@anthropic-ai/sdk';
-import { traceAnthropic } from '@trajekt/core';
+import { traceAnthropic } from '@trajekt-ai/core';
 
 const anthropic = traceAnthropic(new Anthropic(), tracer);
 // unchanged agent code:
@@ -379,7 +379,7 @@ curl -X POST https://trajekt.example.com/v1/scores \\
           </Note>
           <p>How the run metrics are computed:</p>
           <ul>
-            <li><strong>Repeated tool call</strong>: the same tool with the same arguments (key order ignored) as an earlier call that succeeded, with no state-changing call in between. Reading a file again after editing it, or re-running the tests after a fix, is not a loop; doing the same write twice in a row is. A tool counts as state-changing from its name (<C>write</C>, <C>edit</C>, <C>create</C>, <C>update</C>, <C>post</C>, <C>run</C>, <C>bash</C>… but not <C>get</C>, <C>read</C>, <C>search</C>, <C>list</C>…); <C>setMutatingTools()</C> in <C>@trajekt/core</C> overrides the rule. Calls without captured arguments are never counted.</li>
+            <li><strong>Repeated tool call</strong>: the same tool with the same arguments (key order ignored) as an earlier call that succeeded, with no state-changing call in between. Reading a file again after editing it, or re-running the tests after a fix, is not a loop; doing the same write twice in a row is. A tool counts as state-changing from its name (<C>write</C>, <C>edit</C>, <C>create</C>, <C>update</C>, <C>post</C>, <C>run</C>, <C>bash</C>… but not <C>get</C>, <C>read</C>, <C>search</C>, <C>list</C>…); <C>setMutatingTools()</C> in <C>@trajekt-ai/core</C> overrides the rule. Calls without captured arguments are never counted.</li>
             <li><strong>Retry</strong>: a call to the same tool or model right after that call failed. A retry is not counted as a repeat.</li>
             <li><strong>Status</strong>: with a single root span, the root decides — errors caught inside the run do not fail it. Otherwise the last step that is not a system span decides.</li>
             <li><strong>Cost</strong>: the cost from the source when there is one (Langfuse), otherwise estimated from tokens and shown with <C>≈</C>.</li>
@@ -423,7 +423,7 @@ TRAJEKT_REDACT=secrets,email,iban,card,phone
 TRAJEKT_REDACT_PATTERNS=[{"name":"customer","pattern":"CUST-\\\\d{6}"},{"name":"contract","pattern":"CTR-[A-Z0-9]{8}"}]
 `}</Code>
           <p>
-            A match becomes a marker — <C>[email]</C>, <C>[iban]</C>, <C>[card]</C> (only numbers that pass the Luhn check), <C>[customer]</C> — always the same for the same kind of value, so metrics and repeated-call detection still work. If the configuration is invalid, ingestion refuses the request (<C>503</C>) rather than storing data you thought was masked. In your own code, <C>createRedactor</C> and <C>redactTrajectory</C> from <C>@trajekt/core</C> apply the same rules; with <C>traceAnthropic</C>, <C>{'{ captureContent: false }'}</C> keeps prompts out of the traces entirely.
+            A match becomes a marker — <C>[email]</C>, <C>[iban]</C>, <C>[card]</C> (only numbers that pass the Luhn check), <C>[customer]</C> — always the same for the same kind of value, so metrics and repeated-call detection still work. If the configuration is invalid, ingestion refuses the request (<C>503</C>) rather than storing data you thought was masked. In your own code, <C>createRedactor</C> and <C>redactTrajectory</C> from <C>@trajekt-ai/core</C> apply the same rules; with <C>traceAnthropic</C>, <C>{'{ captureContent: false }'}</C> keeps prompts out of the traces entirely.
           </p>
           <ul>
             <li><strong>Retention</strong>: <C>TRAJEKT_RETENTION_DAYS=90</C> deletes older runs (and their scores) each time the cron runs; alerts are kept at least 90 days.</li>
@@ -487,9 +487,9 @@ docker compose exec dashboard pnpm create-read-key claude-desktop
           </p>
 
           {/* ------------------------------------------------------------ */}
-          <H2 id="library">@trajekt/core</H2>
+          <H2 id="library">@trajekt-ai/core</H2>
           <Note tone="warn">
-            <C>@trajekt/core</C> is not published on npm yet — the release is ready and will be announced here. Until then, build it from the repository and install it by path: <C>pnpm --filter @trajekt/core build</C>, then <C>npm i ../trajekt/packages/core</C> from your project.
+            <C>@trajekt-ai/core</C> is not published on npm yet — the release is ready and will be announced here. Until then, build it from the repository and install it by path: <C>pnpm --filter @trajekt-ai/core build</C>, then <C>npm i ../trajekt/packages/core</C> from your project.
           </Note>
           <div className="doc-table-wrap">
             <table className="doc-table">
@@ -517,7 +517,7 @@ docker compose exec dashboard pnpm create-read-key claude-desktop
             <strong id="pricing">Cost estimation.</strong> Spans rarely carry a cost, so it is estimated from tokens with a table of indicative public prices for common Anthropic (including Claude 5.x), OpenAI, Google and Mistral models. Prompt-cache reads and writes are priced separately when the spans report them. The longest matching model prefix wins; an unknown model gets no estimate rather than a wrong one. Prices change: override them.
           </p>
           <Code lang="ts">{`
-import { setPricing } from '@trajekt/core';
+import { setPricing } from '@trajekt-ai/core';
 setPricing({ 'my-fine-tune': { input: 1.2, output: 4.8 } }); // USD per million tokens
 `}</Code>
           <Code label="server: same thing through the environment">{`
@@ -537,7 +537,7 @@ TRAJEKT_PRICING={"my-fine-tune":{"input":1.2,"output":4.8}}
           <Code lang="ts" label="triage.test.ts">{`
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { normalize, assertTrajectory } from '@trajekt/core';
+import { normalize, assertTrajectory } from '@trajekt-ai/core';
 
 test('npe-checkout: opens a PAY ticket, no loop, within budget', () => {
   const run = normalize(JSON.parse(readFileSync('runs/npe-checkout.json', 'utf8')));
@@ -639,7 +639,7 @@ curl -s -H "Authorization: Bearer $TRAJEKT_READ_KEY" \\
 `}</Code>
           <p><strong>Without a server</strong>, compare two saved runs of the suite in code:</p>
           <Code lang="ts" label="eval/compare.ts">{`
-import { normalize, scenarioRunOf, compareScenarios } from '@trajekt/core';
+import { normalize, scenarioRunOf, compareScenarios } from '@trajekt-ai/core';
 
 const baseline = loadRuns('eval/baseline/').map((t) => scenarioRunOf(normalize(t)));
 const current = loadRuns('eval/current/').map((t) => scenarioRunOf(normalize(t)));
@@ -655,7 +655,7 @@ if (r.result === 'fail') {
 
           <H3 id="test-trajekt">Test Trajekt itself</H3>
           <Code label="library tests">{`
-pnpm --filter @trajekt/core test
+pnpm --filter @trajekt-ai/core test
 `}</Code>
           <p>
             The dashboard tests run the real SQL against a throwaway database, created and dropped by each test file. They need a Postgres that accepts the <C>postgres</C> user without a password:

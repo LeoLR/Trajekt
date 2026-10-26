@@ -6,12 +6,12 @@
  * (requestLang, dans app/context.ts) ; les vues la lisent avec getLang() / tr(). Hors d'une
  * requête Next (tests, preview, alertes Slack, MCP), c'est l'anglais.
  *
- * Les libellés produits par @trajekt/core (métriques, raisons d'un verdict)
+ * Les libellés produits par @trajekt-ai/core (métriques, raisons d'un verdict)
  * sont traduits ici, à partir de leurs modèles anglais.
  */
 
 import { cache } from 'react';
-import type { AnyMetricKey, MetricKey } from '@trajekt/core';
+import type { AnyMetricKey, MetricKey } from '@trajekt-ai/core';
 
 export type Lang = 'en' | 'fr';
 export const LANG_COOKIE = 'trajekt_lang';
@@ -56,7 +56,7 @@ export function tr(en: string, fr: string): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* Libellés de @trajekt/core                                            */
+/* Libellés de @trajekt-ai/core                                            */
 /* ------------------------------------------------------------------ */
 
 const METRIC_FR: Record<MetricKey, string> = {
@@ -81,7 +81,7 @@ const METRIC_EN: Record<MetricKey, string> = {
   newPathShare: 'Runs on a new tool path',
 };
 
-/** metricLabel de @trajekt/core, dans la langue demandée. */
+/** metricLabel de @trajekt-ai/core, dans la langue demandée. */
 export function metricName(k: AnyMetricKey, lang: Lang = getLang()): string {
   if (k.startsWith('score:')) return `Score · ${k.slice(6)}`;
   return (lang === 'fr' ? METRIC_FR : METRIC_EN)[k as MetricKey];
@@ -119,7 +119,7 @@ const PATTERNS: Array<[RegExp, (...m: string[]) => string]> = [
   [/^(.+) regressed across the suite$/, (l) => `${labelFr(l)} : régression sur l’ensemble de la suite`],
 ];
 
-/** Un détail ou une raison produits par @trajekt/core, dans la langue demandée. */
+/** Un détail ou une raison produits par @trajekt-ai/core, dans la langue demandée. */
 export function coreText(text: string | undefined, lang: Lang = getLang()): string | undefined {
   if (text === undefined || lang === 'en') return text;
   for (const [re, fn] of PATTERNS) {

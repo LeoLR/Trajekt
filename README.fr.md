@@ -5,7 +5,7 @@
 <p align="center"><a href="README.md">English</a> · <strong>Français</strong></p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@trajekt/core"><img src="https://img.shields.io/npm/v/@trajekt/core?color=FFB224&label=npm" alt="npm" /></a>
+  <a href="https://www.npmjs.com/package/@trajekt-ai/core"><img src="https://img.shields.io/npm/v/@trajekt-ai/core?color=FFB224&label=npm" alt="npm" /></a>
   <a href="#licence"><img src="https://img.shields.io/badge/licence-MIT-blue" alt="Licence : MIT" /></a>
   <a href="#1-lancer-trajekt"><img src="https://img.shields.io/badge/auto--h%C3%A9berg%C3%A9-docker%20compose-2496ED" alt="Auto-hébergé avec Docker Compose" /></a>
   <a href="#enregistrer-un-run-avec-opentelemetry"><img src="https://img.shields.io/badge/ingestion-OpenTelemetry-7AA2F7" alt="Ingestion OpenTelemetry" /></a>
@@ -66,10 +66,10 @@ L’enregistrement passe par OpenTelemetry standard — aucun SDK propriétaire 
 npm i @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-http
 ```
 
-`@trajekt/core` est la librairie qu’utilise le serveur pour lire les traces. Installez-la seulement si vous voulez lire ou noter des traces dans votre propre code ou vos tests :
+`@trajekt-ai/core` est la librairie qu’utilise le serveur pour lire les traces. Installez-la seulement si vous voulez lire ou noter des traces dans votre propre code ou vos tests :
 
 ```bash
-npm i @trajekt/core
+npm i @trajekt-ai/core
 ```
 
 ### 3. Enregistrer un run
@@ -112,7 +112,7 @@ Avec le SDK Anthropic, enveloppez le client une fois et chaque appel au modèle 
 
 ```ts
 import Anthropic from '@anthropic-ai/sdk';
-import { traceAnthropic } from '@trajekt/core';
+import { traceAnthropic } from '@trajekt-ai/core';
 
 const anthropic = traceAnthropic(new Anthropic(), tracer);
 ```
@@ -138,7 +138,7 @@ curl -X POST http://localhost:3000/v1/traces \
 #### Lire une trace dans le code
 
 ```ts
-import { normalize, computeMetrics, annotateSteps } from '@trajekt/core';
+import { normalize, computeMetrics, annotateSteps } from '@trajekt-ai/core';
 
 const run = normalize(trace);            // export Langfuse, OTLP/JSON ou résultat AI SDK
 const metrics = computeMetrics(run);     // status, durationMs, costUsd, redundantToolCalls, retryCount, pathSignature…
@@ -152,7 +152,7 @@ Rejouez un jeu fixe de scénarios — outils et données mockés — à chaque c
 - **Vérifier un run** dans n’importe quel runner de tests :
 
   ```ts
-  import { normalize, assertTrajectory } from '@trajekt/core';
+  import { normalize, assertTrajectory } from '@trajekt-ai/core';
 
   assertTrajectory(normalize(trace), {
     status: 'ok',
@@ -176,7 +176,7 @@ Rejouez un jeu fixe de scénarios — outils et données mockés — à chaque c
       candidate: ${{ github.event.pull_request.head.sha }}
   ```
 
-  Les autres CI appellent `GET /api/agents/:name/evals` ; sans serveur, utilisez `compareScenarios()` de `@trajekt/core`. Un exemple exécutable se trouve dans [`examples/eval-suite`](examples/eval-suite).
+  Les autres CI appellent `GET /api/agents/:name/evals` ; sans serveur, utilisez `compareScenarios()` de `@trajekt-ai/core`. Un exemple exécutable se trouve dans [`examples/eval-suite`](examples/eval-suite).
 
 Voir [Tester votre agent](https://trajekt-eight.vercel.app/fr/docs/#testing) dans la documentation, et la suite d’évaluation de la [démo](https://trajekt-demo.vercel.app/agents/sentry-triage/evals).
 
@@ -193,14 +193,14 @@ Plusieurs projets par instance, chacun avec ses propres clés d’API (`/project
 | Vercel AI SDK | Spans `experimental_telemetry` via un exporteur OTel, ou un résultat `generateText` posté sur `/v1/traces` |
 | OpenInference / OpenLLMetry | LangChain, LlamaIndex, CrewAI… via leur exporteur OTLP : modèles, tokens, outils et leurs arguments |
 | Langfuse | `pnpm import-langfuse --since 7d` récupère les traces et les scores d’un projet Langfuse (relançable, sans doublons), ou postez un export de trace sur `/v1/traces` |
-| SDK Anthropic | `traceAnthropic(client, tracer)` de `@trajekt/core` enregistre chaque `messages.create` |
-| Agents écrits à la main | `traceRun` / `traceTool` de `@trajekt/core` avec n’importe quel tracer OpenTelemetry |
+| SDK Anthropic | `traceAnthropic(client, tracer)` de `@trajekt-ai/core` enregistre chaque `messages.create` |
+| Agents écrits à la main | `traceRun` / `traceTool` de `@trajekt-ai/core` avec n’importe quel tracer OpenTelemetry |
 
 ## Organisation du dépôt
 
 ```
 packages/
-  core/          @trajekt/core — normalize(), fusion, métriques, tests de régression, diff de runs,
+  core/          @trajekt-ai/core — normalize(), fusion, métriques, tests de régression, diff de runs,
                  comparaison de suites d'évaluation, vérifications de trajectoires
 apps/
   dashboard/     Next.js — ingestion (POST /v1/traces), API et dashboard
@@ -221,7 +221,7 @@ docker-compose.yml   Postgres + dashboard
 
 ```bash
 pnpm install
-pnpm --filter @trajekt/core build
+pnpm --filter @trajekt-ai/core build
 pnpm test                       # tests unitaires du core + tests du dashboard (Postgres requis, voir plus bas)
 pnpm --filter dashboard dev     # http://localhost:3000
 pnpm --filter site dev          # landing sur http://localhost:5173 (version française sur /fr/)

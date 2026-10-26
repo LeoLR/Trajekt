@@ -10,7 +10,7 @@
  * délai de cooldown, pour que Slack ne devienne pas du bruit.
  */
 
-import { metricLabel, type Comparison, type AnyMetricKey } from '@trajekt/core';
+import { metricLabel, type Comparison, type AnyMetricKey } from '@trajekt-ai/core';
 import type { Db } from './db';
 import { asJson } from './ingest';
 import { agentVersions, compareLatestVersions, compareRecentWindow, type ComparisonResult } from './queries';

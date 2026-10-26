@@ -2,7 +2,7 @@ import { Recorder } from './Recorder';
 import { Playground } from './Playground';
 import { CopyButton, DEMO_URL, Hatch, Logo, Page, quickstartUrl, REPO_URL, useLang, type Lang } from './Layout';
 
-const INSTALL = 'npm i @trajekt/core';
+const INSTALL = 'npm i @trajekt-ai/core';
 
 function CopyCommand() {
   const fr = useLang() === 'fr';
@@ -118,7 +118,7 @@ await generateText({
   experimental_telemetry: { isEnabled: true, functionId: 'sentry-triage' },
 });`;
 
-const CORE_SNIPPET = `import { normalize, computeMetrics } from '@trajekt/core';
+const CORE_SNIPPET = `import { normalize, computeMetrics } from '@trajekt-ai/core';
 
 // A Langfuse export, OTLP/JSON spans or an AI SDK result
 const run = normalize(trace);
@@ -275,8 +275,8 @@ export function App({ lang = 'en' }: { lang?: Lang }) {
               ))}
             </ol>
             <pre className="code mono" tabIndex={0} aria-label={t.otelLabel}>{lang === 'fr' ? SDK_SNIPPET_FR : SDK_SNIPPET}</pre>
-            <p className="code-note">{t.coreNote} <code className="mono">@trajekt/core</code> {t.coreNoteEnd}</p>
-            <pre className="code mono" tabIndex={0} aria-label={lang === 'fr' ? 'Exemple @trajekt/core' : '@trajekt/core example'}>{lang === 'fr' ? CORE_SNIPPET_FR : CORE_SNIPPET}</pre>
+            <p className="code-note">{t.coreNote} <code className="mono">@trajekt-ai/core</code> {t.coreNoteEnd}</p>
+            <pre className="code mono" tabIndex={0} aria-label={lang === 'fr' ? 'Exemple @trajekt-ai/core' : '@trajekt-ai/core example'}>{lang === 'fr' ? CORE_SNIPPET_FR : CORE_SNIPPET}</pre>
             <div className="works-with">
               <span>{t.worksWith}</span>
               <span className="tag mono">OpenTelemetry · OTLP/HTTP JSON &amp; protobuf</span>

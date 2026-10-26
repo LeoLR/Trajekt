@@ -5,8 +5,8 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // @trajekt/core est un package du workspace : Next le transpile.
-  transpilePackages: ['@trajekt/core'],
+  // @trajekt-ai/core est un package du workspace : Next le transpile.
+  transpilePackages: ['@trajekt-ai/core'],
   // Monorepo : le traçage des fichiers doit partir de la racine du dépôt,
   // sinon le package du workspace manque dans les fonctions déployées.
   outputFileTracingRoot: root,

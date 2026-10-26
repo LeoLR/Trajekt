@@ -2,10 +2,10 @@
  * Suites d'évaluation : les runs rattachés à un scénario (données et
  * outils mockés, joués en dev ou en CI). On les compare scénario par
  * scénario entre deux valeurs d'une dimension (version d'agent, de
- * prompt, d'appli, modèle) avec compareScenarios de @trajekt/core.
+ * prompt, d'appli, modèle) avec compareScenarios de @trajekt-ai/core.
  */
 
-import { compareScenarios, type ScenarioRun, type SuiteComparison } from '@trajekt/core';
+import { compareScenarios, type ScenarioRun, type SuiteComparison } from '@trajekt-ai/core';
 import type { Db } from './db';
 import { DIMENSIONS, type Dimension } from './queries';
 

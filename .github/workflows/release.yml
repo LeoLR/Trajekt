@@ -1,6 +1,6 @@
-name: Release @trajekt/core
+name: Release @trajekt-ai/core
 
-# Publie @trajekt/core sur npm quand on pousse un tag core-vX.Y.Z
+# Publie @trajekt-ai/core sur npm quand on pousse un tag core-vX.Y.Z
 # (la version du tag doit être celle de packages/core/package.json).
 # Secret requis : NPM_TOKEN (jeton npm « Automation » ou granulaire, droit de publication).
 on:
@@ -9,7 +9,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write # provenance npm
+  id-token: write # pour --provenance, à remettre quand le repo sera public
 
 jobs:
   publish:
@@ -27,9 +27,9 @@ jobs:
         run: |
           v=$(node -p "require('./package.json').version")
           [ "core-v$v" = "$GITHUB_REF_NAME" ] || { echo "::error::tag $GITHUB_REF_NAME but package.json says $v"; exit 1; }
-      - run: pnpm --filter @trajekt/core build
-      - run: pnpm --filter @trajekt/core test
+      - run: pnpm --filter @trajekt-ai/core build
+      - run: pnpm --filter @trajekt-ai/core test
       - working-directory: packages/core
-        run: npm publish --provenance --access public
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

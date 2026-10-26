@@ -15,7 +15,7 @@
     "isolatedModules": true,
     "resolveJsonModule": true,
     "paths": {
-      "@trajekt/core": [
+      "@trajekt-ai/core": [
         "../../packages/core/src/index.ts"
       ]
     }

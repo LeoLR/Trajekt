@@ -50,7 +50,7 @@ Script suggéré :
    instance dessus, en direct. Le badge de format détecté
    automatiquement apparaît sans qu'on ait touché à rien — zéro
    config, zéro adaptateur à écrire.
-3. Mentionner en une phrase ce qui tourne dessous (`@trajekt/core`,
+3. Mentionner en une phrase ce qui tourne dessous (`@trajekt-ai/core`,
    MIT, normalise Langfuse/OTLP/AI SDK vers un modèle unique) — sans
    s'attarder, la démo parle plus que le code.
 

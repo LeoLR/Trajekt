@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { gunzipSync } from 'node:zlib';
-import { UnknownFormatError, decodeOtlpProtobuf } from '@trajekt/core';
+import { UnknownFormatError, decodeOtlpProtobuf } from '@trajekt-ai/core';
 import { getDb } from '../../../server/db';
 import { verifyProjectApiKey } from '../../../server/auth';
 import { ingestPayload } from '../../../server/ingest';

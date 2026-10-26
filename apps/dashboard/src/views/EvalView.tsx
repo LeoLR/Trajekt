@@ -1,4 +1,4 @@
-import type { ScenarioChange } from '@trajekt/core';
+import type { ScenarioChange } from '@trajekt-ai/core';
 import type { SuitePageData } from '../server/suites';
 import { DIMENSIONS, type Dimension } from '../server/queries';
 import { Shell, VerdictChip } from '../components/ui';

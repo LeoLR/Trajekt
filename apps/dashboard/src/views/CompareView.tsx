@@ -1,4 +1,4 @@
-import type { DiffRow, TrajectoryStep } from '@trajekt/core';
+import type { DiffRow, TrajectoryStep } from '@trajekt-ai/core';
 import type { ComparePageData } from '../server/pages';
 import { RunStatus, Shell } from '../components/ui';
 import { stepTitle } from '../lib/format';

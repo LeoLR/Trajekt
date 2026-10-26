@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { compareScenarios, type ScenarioRun } from '@trajekt/core';
+import { compareScenarios, type ScenarioRun } from '@trajekt-ai/core';
 import { coreLabel, coreText, metricName, pickLang, relativeTime, scopeText } from '../src/lib/i18n';
 
 test('i18n : langue depuis le cookie, sinon Accept-Language', () => {
@@ -10,7 +10,7 @@ test('i18n : langue depuis le cookie, sinon Accept-Language', () => {
   assert.equal(pickLang('xx', null), 'en');
 });
 
-test('i18n : libellés et détails de @trajekt/core traduits', () => {
+test('i18n : libellés et détails de @trajekt-ai/core traduits', () => {
   assert.equal(metricName('errorRate', 'fr'), 'Runs en échec');
   assert.equal(metricName('score:correct', 'fr'), 'Score · correct');
   assert.equal(coreLabel('Fails more often', 'fr'), 'Échoue plus souvent');

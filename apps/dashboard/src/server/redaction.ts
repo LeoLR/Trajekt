@@ -6,7 +6,7 @@
  * des données qu'on croyait masquées.
  */
 
-import { createRedactor, type BuiltInRedaction, type RedactionPattern } from '@trajekt/core';
+import { createRedactor, type BuiltInRedaction, type RedactionPattern } from '@trajekt-ai/core';
 
 const KNOWN: BuiltInRedaction[] = ['secrets', 'email', 'iban', 'card', 'phone', 'ip'];
 

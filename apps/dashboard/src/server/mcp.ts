@@ -11,7 +11,7 @@
  * (initialize, tools/list, tools/call, ping).
  */
 
-import { metricLabel, annotateSteps, type Comparison, type TrajectoryStep } from '@trajekt/core';
+import { metricLabel, annotateSteps, type Comparison, type TrajectoryStep } from '@trajekt-ai/core';
 import type { Db } from './db';
 import {
   DIMENSIONS, agentVersions, compareLatestVersions, compareRecentWindow, compareValues,

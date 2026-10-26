@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { isDemo } from '../lib/demo';
-import type { Comparison } from '@trajekt/core';
+import type { Comparison } from '@trajekt-ai/core';
 import { coreText, getLang, type Lang } from '../lib/i18n';
 
 /** Lien vers l'autre langue (cookie posé par /api/lang, retour sur la page). */

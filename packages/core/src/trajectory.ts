@@ -167,8 +167,8 @@ export interface Trajectory {
 export class SchemaVersionError extends Error {
   constructor(found: unknown) {
     super(
-      `Trajectory uses schema v${String(found)}; this version of @trajekt/core ` +
-        `reads schema v${SCHEMA_VERSION}. Upgrade @trajekt/core or ` +
+      `Trajectory uses schema v${String(found)}; this version of @trajekt-ai/core ` +
+        `reads schema v${SCHEMA_VERSION}. Upgrade @trajekt-ai/core or ` +
         `normalize the original trace again.`,
     );
     this.name = 'SchemaVersionError';

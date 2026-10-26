@@ -14,7 +14,7 @@ RUN pnpm install --no-frozen-lockfile
 COPY packages/core ./packages/core
 COPY apps/dashboard ./apps/dashboard
 
-RUN pnpm --filter @trajekt/core build
+RUN pnpm --filter @trajekt-ai/core build
 RUN pnpm --filter dashboard build
 
 WORKDIR /app/apps/dashboard

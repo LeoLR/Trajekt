@@ -12,7 +12,7 @@ import {
   type Moments,
   type WindowStats,
   type Trajectory,
-} from '@trajekt/core';
+} from '@trajekt-ai/core';
 import type { Db } from './db';
 import { asJson } from './ingest';
 

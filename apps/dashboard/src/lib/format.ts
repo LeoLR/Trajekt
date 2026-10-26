@@ -1,6 +1,6 @@
 /** Mise en forme partagée par l'interface et les alertes Slack. */
 
-import type { AnyMetricKey, TrajectoryStep } from '@trajekt/core';
+import type { AnyMetricKey, TrajectoryStep } from '@trajekt-ai/core';
 
 export function formatDuration(ms: number | null | undefined): string {
   if (ms == null) return '—';

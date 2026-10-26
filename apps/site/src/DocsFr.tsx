@@ -16,7 +16,7 @@ const SECTIONS: Sections = [
   ['regressions', 'Alertes de régression'],
   ['projects', 'Projets et exploitation', [['redaction', 'Données sensibles']]],
   ['ai', 'Interroger vos agents (MCP)', [['read-keys', 'Clés de lecture'], ['mcp-tools', 'Outils']]],
-  ['library', '@trajekt/core'],
+  ['library', '@trajekt-ai/core'],
   ['testing', 'Tester votre agent', [['test-assert', 'Vérifier un run'], ['eval-suites', 'Suites d’évaluation'], ['eval-ci', 'En CI'], ['test-trajekt', 'Tester Trajekt']]],
   ['api', 'Référence de l’API'],
   ['troubleshooting', 'Dépannage'],
@@ -40,7 +40,7 @@ export function DocsFr() {
           <p>Trajekt a deux parties :</p>
           <ul>
             <li><strong>Le serveur</strong> (<C>apps/dashboard</C>) : une app Next.js avec un Postgres. Il reçoit les traces sur <C>POST /v1/traces</C>, stocke une ligne par run et sert le dashboard.</li>
-            <li><strong>La librairie</strong> (<C>@trajekt/core</C>) : lit une trace dans n’importe quel format supporté vers un modèle unique, calcule ses métriques et compare des groupes de runs. Le serveur l’utilise ; vous pouvez l’utiliser dans vos propres tests.</li>
+            <li><strong>La librairie</strong> (<C>@trajekt-ai/core</C>) : lit une trace dans n’importe quel format supporté vers un modèle unique, calcule ses métriques et compare des groupes de runs. Le serveur l’utilise ; vous pouvez l’utiliser dans vos propres tests.</li>
           </ul>
           <p>Votre agent n’a pas besoin d’un SDK Trajekt. Il envoie des spans OpenTelemetry standard, ou vous postez un fichier de trace.</p>
 
@@ -84,7 +84,7 @@ docker compose down -v           # arrêter et supprimer le volume de la base
           <p>Il faut Node.js 22, pnpm 10 et une base Postgres.</p>
           <Code>{`
 pnpm install
-pnpm --filter @trajekt/core build    # le dashboard importe le paquet compilé
+pnpm --filter @trajekt-ai/core build    # le dashboard importe le paquet compilé
 
 cd apps/dashboard
 cp .env.example .env                 # DATABASE_URL, DASHBOARD_PASSWORD, DASHBOARD_SESSION_SECRET
@@ -153,11 +153,11 @@ new NodeSDK({
 
           <H3 id="send-helpers">Instrumenter votre code</H3>
           <p>
-            Si votre agent est écrit à la main, <C>@trajekt/core</C> fournit deux helpers qui créent les spans attendus par Trajekt, avec n’importe quel tracer OpenTelemetry. Les arguments des outils comptent : sans eux, les appels répétés ne peuvent pas être détectés.
+            Si votre agent est écrit à la main, <C>@trajekt-ai/core</C> fournit deux helpers qui créent les spans attendus par Trajekt, avec n’importe quel tracer OpenTelemetry. Les arguments des outils comptent : sans eux, les appels répétés ne peuvent pas être détectés.
           </p>
           <Code lang="ts" label="agent.ts">{`
 import { trace } from '@opentelemetry/api';
-import { traceRun, traceTool } from '@trajekt/core';
+import { traceRun, traceTool } from '@trajekt-ai/core';
 
 const tracer = trace.getTracer('sentry-triage');
 
@@ -173,7 +173,7 @@ await traceRun(tracer, { agent: 'sentry-triage', agentVersion: '1.5.0', promptVe
           </p>
           <Code lang="ts">{`
 import Anthropic from '@anthropic-ai/sdk';
-import { traceAnthropic } from '@trajekt/core';
+import { traceAnthropic } from '@trajekt-ai/core';
 
 const anthropic = traceAnthropic(new Anthropic(), tracer);
 // le code de l'agent ne change pas :
@@ -330,7 +330,7 @@ curl -X POST https://trajekt.example.com/v1/scores \\
           </Note>
           <p>Comment les métriques d’un run sont calculées :</p>
           <ul>
-            <li><strong>Appel d’outil répété</strong> : le même outil avec les mêmes arguments (ordre des clés ignoré) qu’un appel précédent réussi, sans appel modifiant l’état entre les deux. Relire un fichier après l’avoir modifié, ou relancer les tests après un correctif, n’est pas une boucle ; faire deux fois de suite la même écriture, si. Un outil est considéré comme modifiant l’état d’après son nom (<C>write</C>, <C>edit</C>, <C>create</C>, <C>update</C>, <C>post</C>, <C>run</C>, <C>bash</C>… mais pas <C>get</C>, <C>read</C>, <C>search</C>, <C>list</C>…) ; <C>setMutatingTools()</C> de <C>@trajekt/core</C> remplace cette règle. Les appels sans arguments capturés ne sont jamais comptés.</li>
+            <li><strong>Appel d’outil répété</strong> : le même outil avec les mêmes arguments (ordre des clés ignoré) qu’un appel précédent réussi, sans appel modifiant l’état entre les deux. Relire un fichier après l’avoir modifié, ou relancer les tests après un correctif, n’est pas une boucle ; faire deux fois de suite la même écriture, si. Un outil est considéré comme modifiant l’état d’après son nom (<C>write</C>, <C>edit</C>, <C>create</C>, <C>update</C>, <C>post</C>, <C>run</C>, <C>bash</C>… mais pas <C>get</C>, <C>read</C>, <C>search</C>, <C>list</C>…) ; <C>setMutatingTools()</C> de <C>@trajekt-ai/core</C> remplace cette règle. Les appels sans arguments capturés ne sont jamais comptés.</li>
             <li><strong>Relance</strong> : un appel au même outil ou au même modèle juste après l’échec de cet appel. Une relance n’est pas comptée comme une répétition.</li>
             <li><strong>Statut</strong> : avec un seul span racine, c’est la racine qui décide — les erreurs rattrapées dans le run ne le font pas échouer. Sinon, c’est le dernier step qui n’est pas un span système.</li>
             <li><strong>Coût</strong> : le coût fourni par la source quand il existe (Langfuse), sinon estimé à partir des tokens et affiché avec <C>≈</C>.</li>
@@ -374,7 +374,7 @@ TRAJEKT_REDACT=secrets,email,iban,card,phone
 TRAJEKT_REDACT_PATTERNS=[{"name":"customer","pattern":"CUST-\\\\d{6}"},{"name":"contract","pattern":"CTR-[A-Z0-9]{8}"}]
 `}</Code>
           <p>
-            Une correspondance devient une marque — <C>[email]</C>, <C>[iban]</C>, <C>[card]</C> (seulement les numéros qui passent le contrôle de Luhn), <C>[customer]</C> — toujours la même pour un même type de valeur : les métriques et la détection des appels répétés fonctionnent toujours. Si la configuration est invalide, l’ingestion refuse la requête (<C>503</C>) plutôt que de stocker des données que vous pensiez masquées. Dans votre code, <C>createRedactor</C> et <C>redactTrajectory</C> de <C>@trajekt/core</C> appliquent les mêmes règles ; avec <C>traceAnthropic</C>, <C>{'{ captureContent: false }'}</C> garde les prompts totalement hors des traces.
+            Une correspondance devient une marque — <C>[email]</C>, <C>[iban]</C>, <C>[card]</C> (seulement les numéros qui passent le contrôle de Luhn), <C>[customer]</C> — toujours la même pour un même type de valeur : les métriques et la détection des appels répétés fonctionnent toujours. Si la configuration est invalide, l’ingestion refuse la requête (<C>503</C>) plutôt que de stocker des données que vous pensiez masquées. Dans votre code, <C>createRedactor</C> et <C>redactTrajectory</C> de <C>@trajekt-ai/core</C> appliquent les mêmes règles ; avec <C>traceAnthropic</C>, <C>{'{ captureContent: false }'}</C> garde les prompts totalement hors des traces.
           </p>
           <ul>
             <li><strong>Rétention</strong> : <C>TRAJEKT_RETENTION_DAYS=90</C> supprime les runs plus anciens (et leurs scores) à chaque passage du cron ; les alertes sont gardées au moins 90 jours.</li>
@@ -438,9 +438,9 @@ docker compose exec dashboard pnpm create-read-key claude-desktop
           </p>
 
           {/* ------------------------------------------------------------ */}
-          <H2 id="library">@trajekt/core</H2>
+          <H2 id="library">@trajekt-ai/core</H2>
           <Note tone="warn">
-            <C>@trajekt/core</C> n’est pas encore publié sur npm — la release est prête et sera annoncée ici. D’ici là, compilez-le depuis le dépôt et installez-le par chemin : <C>pnpm --filter @trajekt/core build</C>, puis <C>npm i ../trajekt/packages/core</C> depuis votre projet.
+            <C>@trajekt-ai/core</C> n’est pas encore publié sur npm — la release est prête et sera annoncée ici. D’ici là, compilez-le depuis le dépôt et installez-le par chemin : <C>pnpm --filter @trajekt-ai/core build</C>, puis <C>npm i ../trajekt/packages/core</C> depuis votre projet.
           </Note>
           <div className="doc-table-wrap">
             <table className="doc-table">
@@ -468,7 +468,7 @@ docker compose exec dashboard pnpm create-read-key claude-desktop
             <strong id="pricing">Estimation des coûts.</strong> Les spans portent rarement un coût : il est estimé à partir des tokens avec une table de prix publics indicatifs pour les modèles courants d’Anthropic (dont Claude 5.x), OpenAI, Google et Mistral. Les lectures et écritures du cache de prompt sont tarifées à part quand les spans les rapportent. Le préfixe de modèle le plus long l’emporte ; un modèle inconnu n’a pas d’estimation plutôt qu’une estimation fausse. Les prix changent : remplacez-les.
           </p>
           <Code lang="ts">{`
-import { setPricing } from '@trajekt/core';
+import { setPricing } from '@trajekt-ai/core';
 setPricing({ 'my-fine-tune': { input: 1.2, output: 4.8 } }); // USD par million de tokens
 `}</Code>
           <Code label="serveur : la même chose par l’environnement">{`
@@ -488,7 +488,7 @@ TRAJEKT_PRICING={"my-fine-tune":{"input":1.2,"output":4.8}}
           <Code lang="ts" label="triage.test.ts">{`
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { normalize, assertTrajectory } from '@trajekt/core';
+import { normalize, assertTrajectory } from '@trajekt-ai/core';
 
 test('npe-checkout : ouvre un ticket PAY, sans boucle, dans le budget', () => {
   const run = normalize(JSON.parse(readFileSync('runs/npe-checkout.json', 'utf8')));
@@ -590,7 +590,7 @@ curl -s -H "Authorization: Bearer $TRAJEKT_READ_KEY" \\
 `}</Code>
           <p><strong>Sans serveur</strong>, comparez deux exécutions enregistrées de la suite dans le code :</p>
           <Code lang="ts" label="eval/compare.ts">{`
-import { normalize, scenarioRunOf, compareScenarios } from '@trajekt/core';
+import { normalize, scenarioRunOf, compareScenarios } from '@trajekt-ai/core';
 
 const baseline = loadRuns('eval/baseline/').map((t) => scenarioRunOf(normalize(t)));
 const current = loadRuns('eval/current/').map((t) => scenarioRunOf(normalize(t)));
@@ -606,7 +606,7 @@ if (r.result === 'fail') {
 
           <H3 id="test-trajekt">Tester Trajekt</H3>
           <Code label="tests de la librairie">{`
-pnpm --filter @trajekt/core test
+pnpm --filter @trajekt-ai/core test
 `}</Code>
           <p>
             Les tests du dashboard exécutent le vrai SQL sur une base jetable, créée et supprimée par chaque fichier de test. Il faut un Postgres qui accepte l’utilisateur <C>postgres</C> sans mot de passe :

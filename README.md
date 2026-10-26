@@ -5,7 +5,7 @@
 <p align="center"><strong>English</strong> · <a href="README.fr.md">Français</a></p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@trajekt/core"><img src="https://img.shields.io/npm/v/@trajekt/core?color=FFB224&label=npm" alt="npm" /></a>
+  <a href="https://www.npmjs.com/package/@trajekt-ai/core"><img src="https://img.shields.io/npm/v/@trajekt-ai/core?color=FFB224&label=npm" alt="npm" /></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" /></a>
   <a href="#1-start-trajekt"><img src="https://img.shields.io/badge/self--host-docker%20compose-2496ED" alt="Self-host with Docker Compose" /></a>
   <a href="#record-a-run-with-opentelemetry"><img src="https://img.shields.io/badge/ingest-OpenTelemetry-7AA2F7" alt="Ingest OpenTelemetry" /></a>
@@ -66,10 +66,10 @@ Recording uses plain OpenTelemetry — there is no proprietary SDK in your agent
 npm i @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-http
 ```
 
-`@trajekt/core` is the library the server uses to read traces. Install it only if you want to read or score traces in your own code or tests:
+`@trajekt-ai/core` is the library the server uses to read traces. Install it only if you want to read or score traces in your own code or tests:
 
 ```bash
-npm i @trajekt/core
+npm i @trajekt-ai/core
 ```
 
 ### 3. Record a run
@@ -129,7 +129,7 @@ curl -X POST http://localhost:3000/v1/traces \
 #### Read a trace in code
 
 ```ts
-import { normalize, computeMetrics, annotateSteps } from '@trajekt/core';
+import { normalize, computeMetrics, annotateSteps } from '@trajekt-ai/core';
 
 const run = normalize(trace);            // Langfuse export, OTLP/JSON or AI SDK result
 const metrics = computeMetrics(run);     // status, durationMs, costUsd, redundantToolCalls, retryCount, pathSignature…
@@ -143,7 +143,7 @@ Replay a fixed set of scenarios — mocked tools and data — on every change, a
 - **Assert on a run** in any test runner:
 
   ```ts
-  import { normalize, assertTrajectory } from '@trajekt/core';
+  import { normalize, assertTrajectory } from '@trajekt-ai/core';
 
   assertTrajectory(normalize(trace), {
     status: 'ok',
@@ -167,7 +167,7 @@ Replay a fixed set of scenarios — mocked tools and data — on every change, a
       candidate: ${{ github.event.pull_request.head.sha }}
   ```
 
-  Other CIs call `GET /api/agents/:name/evals`; without a server, use `compareScenarios()` from `@trajekt/core`. A runnable example is in [`examples/eval-suite`](examples/eval-suite).
+  Other CIs call `GET /api/agents/:name/evals`; without a server, use `compareScenarios()` from `@trajekt-ai/core`. A runnable example is in [`examples/eval-suite`](examples/eval-suite).
 
 See [Testing your agent](https://trajekt-eight.vercel.app/docs/#testing) in the docs, and the eval suite of the [live demo](https://trajekt-demo.vercel.app/agents/sentry-triage/evals).
 
@@ -184,13 +184,13 @@ Several projects per instance, each with its own API keys (`/projects`). Custome
 | Vercel AI SDK | `experimental_telemetry` spans through an OTel exporter, or a `generateText` result posted to `/v1/traces` |
 | OpenInference / OpenLLMetry | LangChain, LlamaIndex, CrewAI… through their OTLP exporter: models, tokens, tools and their arguments |
 | Langfuse | `pnpm import-langfuse --since 7d` pulls traces and scores from a Langfuse project (re-runnable, no duplicates), or post a trace export to `/v1/traces` |
-| Hand-written agents | `traceRun` / `traceTool` from `@trajekt/core` with any OpenTelemetry tracer |
+| Hand-written agents | `traceRun` / `traceTool` from `@trajekt-ai/core` with any OpenTelemetry tracer |
 
 ## Repository layout
 
 ```
 packages/
-  core/          @trajekt/core — normalize(), merge, metrics, regression tests, run diff,
+  core/          @trajekt-ai/core — normalize(), merge, metrics, regression tests, run diff,
                  eval suite comparison, trajectory assertions
 apps/
   dashboard/     Next.js — ingestion (POST /v1/traces), API and dashboard
@@ -211,7 +211,7 @@ docker-compose.yml   Postgres + dashboard
 
 ```bash
 pnpm install
-pnpm --filter @trajekt/core build
+pnpm --filter @trajekt-ai/core build
 pnpm test                       # core unit tests + dashboard tests (needs a Postgres, see below)
 pnpm --filter dashboard dev     # http://localhost:3000
 pnpm --filter site dev          # landing page on http://localhost:5173

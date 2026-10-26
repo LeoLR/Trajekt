@@ -12,7 +12,7 @@ import { checkRegressions, recentAlerts, slackMessage } from '../src/server/aler
 import { simulateTraffic, sentryTriageRun, rng } from '../src/server/simulate';
 import { createSessionToken, isValidSessionToken } from '../src/lib/session';
 import { loadComparePage } from '../src/server/pages';
-import { UnknownFormatError } from '@trajekt/core';
+import { UnknownFormatError } from '@trajekt-ai/core';
 
 let ctx: Awaited<ReturnType<typeof freshDb>>;
 let db: PgWire;

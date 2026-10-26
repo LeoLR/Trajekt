@@ -199,7 +199,7 @@ Ne renvoie jamais les steps. Tri : début du run décroissant.
 
 ### `GET /api/runs/:id`
 
-`{ summary, trajectory }` : les métriques du run et la `Trajectory` complète de `@trajekt/core`.
+`{ summary, trajectory }` : les métriques du run et la `Trajectory` complète de `@trajekt-ai/core`.
 
 ### Compatibilité phase 1
 

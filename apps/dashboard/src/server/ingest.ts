@@ -15,7 +15,7 @@ import {
   computeMetrics,
   SCHEMA_VERSION,
   type Trajectory,
-  type TrajectorySource, redactTrajectory } from '@trajekt/core';
+  type TrajectorySource, redactTrajectory } from '@trajekt-ai/core';
 import type { Db } from './db';
 import { redactorFromEnv } from './redaction';
 
@@ -193,7 +193,7 @@ async function persist(db: Db, projectId: string, incoming: Trajectory): Promise
 
 /**
  * Normalise et persiste un payload. Lève UnknownFormatError (de
- * @trajekt/core) si aucun format n'est reconnu.
+ * @trajekt-ai/core) si aucun format n'est reconnu.
  */
 export async function ingestPayload(
   db: Db,

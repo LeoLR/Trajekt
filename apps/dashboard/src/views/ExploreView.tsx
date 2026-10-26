@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useState } from 'react';
-import { annotateSteps, computeMetrics, normalizeAll, type Trajectory } from '@trajekt/core';
+import { annotateSteps, computeMetrics, normalizeAll, type Trajectory } from '@trajekt-ai/core';
 import { Shell } from '../components/ui';
 import { RunTimeline } from '../components/RunTimeline';
 import { formatCost, formatDuration } from '../lib/format';

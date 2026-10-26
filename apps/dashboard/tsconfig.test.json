@@ -2,7 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "paths": {
-      "@trajekt/core": [
+      "@trajekt-ai/core": [
         "../../packages/core/src/index.ts"
       ]
     },

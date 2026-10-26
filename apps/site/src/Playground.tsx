@@ -7,13 +7,13 @@ import {
   type StepAnnotation,
   type Trajectory,
   type TrajectoryStep,
-} from '@trajekt/core';
+} from '@trajekt-ai/core';
 import otlpSample from '../../../docs/assets/samples/otlp-sentry-triage.json';
 import langfuseSample from '../../../docs/assets/samples/langfuse-support-bot.json';
 import aiSdkSample from '../../../docs/assets/samples/ai-sdk-trip-planner.json';
 
 /**
- * "Try it" : la vraie bibliothèque @trajekt/core, dans le navigateur.
+ * "Try it" : la vraie bibliothèque @trajekt-ai/core, dans le navigateur.
  * Un fichier déposé n'est jamais envoyé nulle part.
  */
 
@@ -216,8 +216,8 @@ export function Playground() {
       </div>
       <p className="pg-hint">
         {fr
-          ? <>Export de trace Langfuse, OTLP/JSON ou résultat du Vercel AI SDK — déposez-le n’importe où sur ce panneau. Il est lu dans votre navigateur par <code className="mono">@trajekt/core</code> ; rien n’est envoyé.</>
-          : <>Langfuse trace export, OTLP/JSON or a Vercel AI SDK result — drop it anywhere on this panel. It is read in your browser by <code className="mono">@trajekt/core</code>; nothing is uploaded.</>}
+          ? <>Export de trace Langfuse, OTLP/JSON ou résultat du Vercel AI SDK — déposez-le n’importe où sur ce panneau. Il est lu dans votre navigateur par <code className="mono">@trajekt-ai/core</code> ; rien n’est envoyé.</>
+          : <>Langfuse trace export, OTLP/JSON or a Vercel AI SDK result — drop it anywhere on this panel. It is read in your browser by <code className="mono">@trajekt-ai/core</code>; nothing is uploaded.</>}
       </p>
 
       {error && <div className="pg-error" role="alert">{error}</div>}
