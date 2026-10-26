@@ -139,7 +139,7 @@ function scanRepeats(steps: TrajectoryStep[]): Map<number, number> {
 
 function stepName(s: TrajectoryStep): string {
   if (s.type === 'tool_call') return s.name;
-  if (s.type === 'llm_call') return s.model ?? '';
+  if (s.type === 'llm_call') return s.name ?? s.model ?? '';
   if (s.type === 'custom') return s.kind;
   return '';
 }
@@ -234,7 +234,7 @@ export function computeMetrics(t: Trajectory): RunMetrics {
   const redundantToolCalls = scanRepeats(t.steps).size;
 
   // Retries : un step qui suit immédiatement l'échec d'un step du même
-  // type et du même nom (outil ou modèle).
+  // type et du même nom (outil ; pour un appel LLM, trajekt.step.name ou le modèle).
   let retryCount = 0;
   const meaningful = t.steps.filter((s) => s.type === 'llm_call' || s.type === 'tool_call');
   for (let i = 1; i < meaningful.length; i++) {

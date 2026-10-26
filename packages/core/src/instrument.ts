@@ -132,6 +132,8 @@ export interface LlmCallInfo {
   /** Les messages envoyés, enregistrés si captureContent (défaut : oui). */
   input?: unknown;
   captureContent?: boolean;
+  /** Nom du step dans Trajekt (trajekt.step.name : « PLAN », « DEVELOP#2 »…) ; à défaut, le modèle sert de titre. */
+  name?: string;
 }
 
 /** Lit l'usage d'une réponse Anthropic ou OpenAI. */
@@ -172,6 +174,7 @@ export function traceLlm<T>(tracer: TracerLike, info: LlmCallInfo, fn: () => Pro
     'gen_ai.request.model': info.model,
   };
   if (info.system) attrs['gen_ai.system'] = info.system;
+  if (info.name) attrs['trajekt.step.name'] = info.name;
   const capture = info.captureContent !== false;
   if (capture && info.input !== undefined) attrs['gen_ai.input.messages'] = json(info.input);
   return inSpan(tracer, `chat ${info.model}`, attrs, async (span) => {
@@ -195,9 +198,16 @@ export function traceLlm<T>(tracer: TracerLike, info: LlmCallInfo, fn: () => Pro
  *
  *   const anthropic = traceAnthropic(new Anthropic(), tracer);
  *   const msg = await anthropic.messages.create({ model: 'claude-sonnet-5-5', … });
+ *
+ * stepName nomme les appels dans la timeline (sinon : le modèle). Une chaîne
+ * pour un client par phase, ou une fonction des paramètres de l'appel :
+ *
+ *   const planner = traceAnthropic(new Anthropic(), tracer, { stepName: 'PLAN' });
+ *   traceAnthropic(client, tracer, { stepName: (p) => p.metadata?.phase });
  */
 export function traceAnthropic<C extends { messages: { create: (...args: any[]) => any } }>(
-  client: C, tracer: TracerLike, opts: { captureContent?: boolean } = {},
+  client: C, tracer: TracerLike,
+  opts: { captureContent?: boolean; stepName?: string | ((params: any) => string | undefined) } = {},
 ): C {
   const messages = new Proxy(client.messages, {
     get(target, prop, receiver) {
@@ -207,7 +217,8 @@ export function traceAnthropic<C extends { messages: { create: (...args: any[]) 
         // Le streaming renvoie un flux, pas une réponse : on le laisse passer tel quel.
         if (params?.stream) return value.call(target, params, ...rest);
         const input = params?.system !== undefined ? [{ role: 'system', content: params.system }, ...(params.messages ?? [])] : params?.messages;
-        return traceLlm(tracer, { model: String(params?.model ?? 'unknown'), system: 'anthropic', input, captureContent: opts.captureContent }, () => value.call(target, params, ...rest));
+        const name = typeof opts.stepName === 'function' ? opts.stepName(params) : opts.stepName;
+        return traceLlm(tracer, { model: String(params?.model ?? 'unknown'), system: 'anthropic', input, captureContent: opts.captureContent, name }, () => value.call(target, params, ...rest));
       };
     },
   });

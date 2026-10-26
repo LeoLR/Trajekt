@@ -98,3 +98,21 @@ test('traceAnthropic : modèle, tokens avec cache, coût, messages ; le reste du
   assert.equal(m.costUsd, 0.0049);
   assert.equal(m.costEstimated, true);
 });
+
+test('traceAnthropic / traceLlm : stepName nomme les appels (chaîne ou fonction des paramètres)', async () => {
+  const { traceAnthropic, traceLlm, traceRun: tr } = await import('../src/index.js');
+  const { tracer, payload } = fakeTracer();
+  const client = { messages: { async create(p: any) { return { model: p.model, content: [], usage: { input_tokens: 1, output_tokens: 1 } }; } } };
+  const planner = traceAnthropic(client, tracer, { stepName: 'PLAN' });
+  const byPhase = traceAnthropic(client, tracer, { stepName: (p) => p.metadata?.phase });
+  const plain = traceAnthropic(client, tracer);
+  await tr(tracer, { agent: 'relay' }, async () => {
+    await planner.messages.create({ model: 'claude-sonnet-5-5', messages: [] });
+    await byPhase.messages.create({ model: 'claude-sonnet-5-5', messages: [], metadata: { phase: 'DEVELOP#2' } });
+    await plain.messages.create({ model: 'claude-sonnet-5-5', messages: [] });
+    await traceLlm(tracer, { model: 'claude-haiku-5-5', name: 'REVIEW' }, async () => ({ content: [] }));
+  });
+  const llms = normalize(payload()).steps.filter((s) => s.type === 'llm_call') as any[];
+  assert.deepEqual(llms.map((s) => s.name), ['PLAN', 'DEVELOP#2', undefined, 'REVIEW']);
+  assert.deepEqual(llms.map((s) => s.model), ['claude-sonnet-5-5', 'claude-sonnet-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']);
+});

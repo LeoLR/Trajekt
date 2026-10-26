@@ -167,9 +167,11 @@ const langfuseNormalizer: Normalizer = {
         if (promptVersion === undefined && o.promptVersion != null) {
           promptVersion = String(o.promptVersion);
         }
+        const name = langfuseStepName(o);
         steps.push({
           ...base,
           type: 'llm_call',
+          ...(name ? { name } : {}),
           model: o.model ?? undefined,
           input: toMessages(o.input),
           output: toMessages(o.output)[0],
@@ -551,6 +553,23 @@ function toMessages(io: unknown): Message[] {
   if (typeof io === 'string') return [{ role: 'user', content: io }];
   if (isObj(io)) return toMessages([io]);
   return [];
+}
+
+/**
+ * Nom d'une génération Langfuse : metadata['trajekt.step.name'] s'il est
+ * posé, sinon le nom de l'observation quand il a été choisi par
+ * l'utilisateur. Les noms posés d'office par les SDK (« generation »,
+ * « ChatAnthropic », « OpenAI-generation », « litellm-completion »…) et
+ * le nom du modèle lui-même sont ignorés : le modèle reste le titre.
+ */
+function langfuseStepName(o: any): string | undefined {
+  const explicit = o.metadata?.['trajekt.step.name'];
+  if (typeof explicit === 'string' && explicit) return explicit;
+  const n = typeof o.name === 'string' ? o.name.trim() : '';
+  if (!n || n === o.model) return undefined;
+  if (/generation|completion|^(chat|llm|messages?)$|^(anthropic|openai|bedrock|vertex|azure)/i.test(n)) return undefined;
+  if (/^Chat[A-Z]/.test(n)) return undefined; // classes LangChain : ChatOpenAI, ChatAnthropic…
+  return n;
 }
 
 function looksLikeToolSpan(o: any): boolean {

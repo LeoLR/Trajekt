@@ -120,7 +120,7 @@ function runLine(r: RunSummary): string {
 
 function stepName(s: TrajectoryStep): string {
   if (s.type === 'tool_call') return s.name;
-  if (s.type === 'llm_call') return `LLM ${s.model ?? ''}`.trim();
+  if (s.type === 'llm_call') return `LLM ${s.name ?? s.model ?? ''}`.trim();
   if (s.type === 'custom') return s.kind;
   return s.type;
 }

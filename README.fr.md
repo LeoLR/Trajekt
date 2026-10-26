@@ -117,7 +117,7 @@ import { traceAnthropic } from '@trajekt-ai/core';
 const anthropic = traceAnthropic(new Anthropic(), tracer);
 ```
 
-Trajekt reconnaît les spans qui suivent les conventions sémantiques GenAI d’OpenTelemetry (`gen_ai.*`) et les spans de télémétrie du Vercel AI SDK (`ai.*`). Définissez `service.version` pour la version de l’app, et `trajekt.agent.version` / `trajekt.prompt.version` quand l’agent ou son prompt évoluent séparément. Un step LLM a pour titre son modèle ; posez `trajekt.step.name` sur son span pour le nommer (une phase d’agent comme `PLAN` ou `DEVELOP#2`) :
+Trajekt reconnaît les spans qui suivent les conventions sémantiques GenAI d’OpenTelemetry (`gen_ai.*`) et les spans de télémétrie du Vercel AI SDK (`ai.*`). Définissez `service.version` pour la version de l’app, et `trajekt.agent.version` / `trajekt.prompt.version` quand l’agent ou son prompt évoluent séparément. Un step LLM a pour titre son modèle ; posez `trajekt.step.name` sur son span pour le nommer (une phase d’agent comme `PLAN` ou `DEVELOP#2` ; avec les helpers, `traceLlm({ name })` ou `traceAnthropic(client, tracer, { stepName })`, une chaîne ou une fonction des paramètres de l’appel ; avec Langfuse, le nom de la génération) :
 
 ```bash
 OTEL_RESOURCE_ATTRIBUTES=service.version=3.2.0,trajekt.agent.version=1.5.0,trajekt.prompt.version=v8

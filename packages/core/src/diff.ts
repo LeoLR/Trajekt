@@ -35,12 +35,19 @@ export interface TrajectoryDiff {
 
 const comparable = (s: TrajectoryStep) => s.type !== 'custom';
 
-/** Identité "faible" : sur quoi on aligne. */
-function kind(s: TrajectoryStep): string {
+/**
+ * Identité "faible" : sur quoi on aligne. Un appel LLM nommé
+ * (trajekt.step.name) s'aligne sur le même nom, mais seulement si les
+ * deux runs nomment leurs appels : sinon, comparer une version qui nomme
+ * à une qui ne nomme pas décalerait tout.
+ */
+function kind(s: TrajectoryStep, useNames: boolean): string {
   if (s.type === 'tool_call') return `tool:${s.name}`;
-  if (s.type === 'llm_call') return 'llm';
+  if (s.type === 'llm_call') return useNames && s.name ? `llm:${s.name}` : 'llm';
   return s.type;
 }
+
+const namesLlm = (steps: TrajectoryStep[]) => steps.some((s) => s.type === 'llm_call' && !!s.name);
 
 function failed(s: TrajectoryStep): boolean {
   return 'error' in s && typeof s.error === 'string' && s.error.length > 0;
@@ -59,8 +66,9 @@ function changesBetween(a: TrajectoryStep, b: TrajectoryStep): DiffRow['changes'
 export function diffTrajectories(ta: Trajectory, tb: Trajectory): TrajectoryDiff {
   const A = ta.steps.filter(comparable);
   const B = tb.steps.filter(comparable);
-  const ka = A.map(kind);
-  const kb = B.map(kind);
+  const useNames = namesLlm(A) && namesLlm(B);
+  const ka = A.map((s) => kind(s, useNames));
+  const kb = B.map((s) => kind(s, useNames));
 
   // LCS classique (O(n·m)) : les runs d'agent comptent des dizaines de
   // steps, pas des milliers. Au-delà, on borne pour rester raisonnable.
